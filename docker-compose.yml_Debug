@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma:/chroma
+    restart: unless-stopped
+
+  mcp-server:
+    build: ./mcp_server
+    container_name: mcp-server
+    env_file:
+      - .env
+    ports:
+      - "3333:3333" # FastAPI
+      - "5678:5678" # VSCode Debug
+    depends_on:
+      - ollama
+      - chroma
+    volumes:
+      - ./mcp_server:/app
+      - ./data/docs:/app/data/docs
+    restart: unless-stopped
+
+volumes:
+  ollama:
+  chroma:
