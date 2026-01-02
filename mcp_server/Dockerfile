@@ -2,9 +2,15 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# curl 필요
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3333"]
+# entrypoint 실행 권한
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
