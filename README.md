@@ -15,12 +15,15 @@ ollama-rag-mcp/
 ├─ mcp_server/
 │  ├─ Dockerfile
 │  ├─ requirements.txt
-│  ├─ main.py        # FastAPI MCP 서버
-│  ├─ rag.py         # RAG 로직
-│  ├─ chroma.py      # ChromaDB client
-│  └─ ollama.py      # Ollama 호출
+│  ├─ main.py               # FastAPI MCP 서버
+│  ├─ rag.py                # RAG 로직
+│  ├─ chroma.py             # ChromaDB client
+│  ├─ ollama.py             # Ollama 호출
+│  ├─ entrypoint.sh         # Ollama 모델 자동 pull
+│  ├─ entrypoint.debug.sh   # 디버그 전용 엔트리포인트
+│  └─ ingest.py             # 문서 일괄 인덱싱 스크립트
 └─ data/
-   └─ docs/          # RAG 문서 저장 디렉토리
+   └─ docs/                 # RAG 문서 저장 디렉토리
 ```
 
 ---
@@ -28,9 +31,21 @@ ollama-rag-mcp/
 ## ⚙️ 환경 변수 (.env)
 
 ```env
+# -----------------------
+# Ollama
+# -----------------------
 OLLAMA_BASE_URL=http://ollama:11434
-OLLAMA_MODEL=gemma3:1b
 
+# Chat 모델
+OLLAMA_CHAT_MODEL=gemma3:1b
+
+# Embedding 모델 (⚠️ 반드시 embedding 전용 모델)
+OLLAMA_EMBED_MODEL=nomic-embed-text
+
+
+# -----------------------
+# ChromaDB
+# -----------------------
 CHROMA_HOST=chroma
 CHROMA_PORT=8000
 CHROMA_COLLECTION=rag_docs
@@ -43,12 +58,29 @@ CHROMA_COLLECTION=rag_docs
 ### 1️⃣ Docker 컨테이너 실행
 
 ```bash
+docker-compose up --build -d
+```
+
+Docker 생성 후 `Dockerfile`에서 `entrypoint.sh`를 호출하여 아래 모델을 자동으로 pull 합니다.
+
+* `gemma3:1b`
+* `nomic-embed-text`
+
+설치 여부는 다음 명령으로 확인합니다.
+
+```bash
+docker logs ollama
+```
+
+컨테이너 재실행 시:
+
+```bash
 docker compose up -d
 ```
 
 ---
 
-### 2️⃣ Ollama 모델 다운로드
+### 2️⃣ Ollama 모델 수동 다운로드 (선택)
 
 #### 기본 LLM 모델
 
@@ -114,8 +146,8 @@ curl -X POST http://localhost:3333/mcp/tools/rag_chat -H "Content-Type: applicat
 ```
 Client (curl / MCP)
   └─ FastAPI (/mcp/tools/*)
-       ├─ ollama_chat      → Ollama LLM 응답
-       ├─ add_doc          → Embedding → ChromaDB 저장
+       ├─ chat            → Ollama LLM 응답
+       ├─ add_doc         → Embedding → ChromaDB 저장
        └─ rag_chat
             ├─ Embedding (nomic-embed-text)
             ├─ ChromaDB 검색
@@ -126,19 +158,21 @@ Client (curl / MCP)
 
 ## ✅ 특징
 
-- Docker 기반 로컬 LLM (Ollama)
-- ChromaDB 벡터 검색
-- FastAPI MCP Tool 구조
-- Async 기반 RAG 파이프라인
-- Windows / Linux 모두 사용 가능
+* Docker 기반 로컬 LLM (Ollama)
+* ChromaDB 벡터 검색
+* FastAPI MCP Tool 구조
+* Async 기반 RAG 파이프라인
+* Chat / Embedding 모델 분리 설계
+* Windows / Linux 모두 사용 가능
 
 ---
 
 ## 📌 주의 사항
 
-- Ollama embedding API는 **단일 텍스트 기준**으로 사용
-- 모든 async 함수는 반드시 `await` 필요
-- Windows CMD는 JSON escape 필수
+* Ollama embedding API는 **단일 텍스트 기준**으로 사용
+* Embedding 모델은 반드시 embedding 전용 모델 사용
+* 모든 async 함수는 반드시 `await` 필요
+* Windows CMD는 JSON escape 필수
 
 ---
 
