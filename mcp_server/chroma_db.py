@@ -59,11 +59,17 @@ def split_text(text: str, chunk_size=500, overlap=50):
 
 async def add_document(doc_id: str, full_text: str):
     chunks = split_text(full_text)
+    if not chunks:
+        return
 
     vectors = await ollama_embed_batch(chunks)
+
+    if len(chunks) != len(vectors):
+        raise RuntimeError("chunk/vector 개수 불일치")
 
     collection.add(
         ids=[f"{doc_id}_{i}" for i in range(len(chunks))],
         documents=chunks,
         embeddings=vectors
     )
+
