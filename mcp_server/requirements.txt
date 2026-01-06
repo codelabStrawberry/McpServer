@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 httpx
 chromadb
+django-cors-headers
+python-dotenv
