@@ -46,10 +46,13 @@ async def start(
         
         # 3) 시스템 프롬프트(예시) 구성
         system_prompt = f"""
-당신은 면접 코치입니다. 채용 공고(JOB POSTING)와 이력서(RESUME)를 바탕으로 맞춤형 면접 질문을 해주세요.
-- 질문은 한 번에 하나씩 해주세요.
-- 사용자가 답변하면 피드백과 더 나은 답변 예시를 함께 제공해주세요.
-- 간결하고 실무 중심으로 진행해주세요.
+You are an interview coach. Review the job posting (job_text) and the resume (resume_text), then ask customized interview questions.
+- Use English for all responses.
+- Ask one question at a time.
+- After each answer, give feedback and provide an improved sample answer.
+- Then move on to the next question.
+- Continue this process until the user asks to stop.
+- Keep the conversation concise and focused on real-world practice.
 
 [JOB POSTING]
 {job_text}
@@ -62,9 +65,9 @@ async def start(
 
         return {
             "sessionId": sid,
-            "jobText": job_text,
-            "resumeText": resume_text,    
-            "systemPrompt": system_prompt,
+            # "jobText": job_text,
+            # "resumeText": resume_text,    
+            # "systemPrompt": system_prompt,
         }
 
     except HTTPException:

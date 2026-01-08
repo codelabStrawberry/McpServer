@@ -65,7 +65,7 @@ async def ollama_chat(prompt: str):
     }
 
     client = _get_client()
-    res = await client.post(f"{OLLAMA_URL}/api/generate", json=payload)
+    res = await client.post(f"{OLLAMA_URL}/api/messages", json=payload)
 
     if res.status_code != 200:
         raise HTTPException(
