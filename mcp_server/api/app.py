@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from ollama_client import create_client, close_client
-from api.routes import chat, rag, docs, chatRuntime
+from api.routes import chat, rag, docs, chatRuntime, jobfit_route
 
 
 # .env 파일 로드
@@ -41,6 +41,7 @@ app.add_middleware(
 
 
 app.include_router(chat.router, prefix="/chat")
+app.include_router(jobfit_route.router, prefix="/jobfit")
 app.include_router(chatRuntime.router, prefix="")
 app.include_router(rag.router, prefix="/mcp/tools")
 app.include_router(docs.router, prefix="/mcp/tools")
