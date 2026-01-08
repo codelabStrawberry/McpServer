@@ -13,3 +13,4 @@ curl -s -X POST "$OLLAMA_BASE_URL/api/pull" \
 
 echo "▶ Start MCP Server"
 exec uvicorn main:app --host 0.0.0.0 --port 3333
+# exec python -m uvicorn main:app  --host 0.0.0.0  --port 3333  --log-level debug

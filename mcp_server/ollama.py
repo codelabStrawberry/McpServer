@@ -2,7 +2,7 @@
 import os
 import asyncio
 from fastapi import HTTPException
-import ollama_client  # 🔥 중요: 변수 직접 import ❌
+from ollama_client import get_client
 
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "gemma3:1b")
@@ -10,7 +10,7 @@ EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 
 
 def _get_client():
-    client = ollama_client.ollama_http_client
+    client = get_client()
     if client is None:
         raise HTTPException(
             status_code=500,

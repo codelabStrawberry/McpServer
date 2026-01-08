@@ -14,3 +14,9 @@ async def close_client():
     if ollama_http_client:
         await ollama_http_client.aclose()
         ollama_http_client = None
+
+
+def get_client() -> httpx.AsyncClient:
+    if ollama_http_client is None:
+        raise RuntimeError("Ollama client not initialized")
+    return ollama_http_client
