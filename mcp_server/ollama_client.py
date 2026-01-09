@@ -6,7 +6,7 @@ ollama_http_client: httpx.AsyncClient | None = None
 
 async def create_client():
     global ollama_http_client
-    ollama_http_client = httpx.AsyncClient(timeout=60.0)
+    ollama_http_client = httpx.AsyncClient(timeout=300.0)
 
 
 async def close_client():

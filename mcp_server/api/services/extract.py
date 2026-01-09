@@ -10,7 +10,7 @@ def _clean_text(text: str) -> str:
 
 def extract_pdf_text(pdf_bytes: bytes) -> str:
     if not pdf_bytes:
-        return ""
+        return "Not text"
 
     out = []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:

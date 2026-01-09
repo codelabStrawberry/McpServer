@@ -12,13 +12,16 @@ import os
 # .env 파일 로드
 load_dotenv()
 
+INGEST_ON_STARTUP = os.getenv("INGEST_ON_STARTUP", "false").lower()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🔥 FastAPI STARTUP: create_client()", flush=True)
     await create_client()
 
     print("🔥 FastAPI STARTUP: ingest_docs()", flush=True)
-    await ingest_docs()
+    if(INGEST_ON_STARTUP == "true"):
+        await ingest_docs()
 
     yield
 
@@ -49,7 +52,7 @@ app.add_middleware(
 
 
 app.include_router(chat.router, prefix="/chat")
-app.include_router(jobfit_route.router, prefix="/jobfit")
+app.include_router(jobfit_route.router, prefix="")
 app.include_router(chatRuntime.router, prefix="")
 app.include_router(rag.router, prefix="/mcp/tools")
 app.include_router(docs.router, prefix="/mcp/tools")
