@@ -11,6 +11,7 @@ from api.db.redis import get_redis_client  # 새 모듈 임포트
 load_dotenv()
 
 REDIS_URL = os.getenv("REDIS_URL")
+INGEST_ON_STARTUP = os.getenv("INGEST_ON_STARTUP", "false").lower()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,7 +19,8 @@ async def lifespan(app: FastAPI):
     await create_client()
 
     print("🔥 FastAPI STARTUP: ingest_docs()", flush=True)
-    await ingest_docs()
+    if(INGEST_ON_STARTUP == "true"):
+        await ingest_docs()
 
     # Redis 연결 초기화
     print("🔥 FastAPI STARTUP: Redis 연결", flush=True)

@@ -17,7 +17,7 @@ def extract_pdf_text(
     return_mode: str = "text",           # "text" | "summary" | "both"
 ) -> str:
     if not pdf_bytes:
-        return ""
+        return "Not text"
 
     out = []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
