@@ -72,4 +72,7 @@ async def add_document(doc_id: str, full_text: str):
         documents=chunks,
         embeddings=vectors
     )
+    print(f"✅ added to chroma: {doc_id}", flush=True)
+
+
 

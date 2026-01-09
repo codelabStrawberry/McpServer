@@ -4,19 +4,27 @@ from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from ollama_client import create_client, close_client
-from api.routes import chat, rag, docs, chatRuntime, jobfit_route
+from ingest import ingest_docs
+from api.routes import chat, rag, docs, chatRuntime, jobfit_route, resume_analyze
 
+import os
 
 # .env 파일 로드
 load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🔥 FastAPI STARTUP: create_client()")
+    print("🔥 FastAPI STARTUP: create_client()", flush=True)
     await create_client()
+
+    print("🔥 FastAPI STARTUP: ingest_docs()", flush=True)
+    await ingest_docs()
+
     yield
-    print("🔥 FastAPI SHUTDOWN: close_client()")
+
+    print("🔥 FastAPI SHUTDOWN: close_client()", flush=True)
     await close_client()
+
 
 
 app = FastAPI(
@@ -45,3 +53,4 @@ app.include_router(jobfit_route.router, prefix="/jobfit")
 app.include_router(chatRuntime.router, prefix="")
 app.include_router(rag.router, prefix="/mcp/tools")
 app.include_router(docs.router, prefix="/mcp/tools")
+app.include_router(resume_analyze.router, prefix="/resume")
