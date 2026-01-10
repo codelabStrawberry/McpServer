@@ -22,22 +22,19 @@ jobs:
           ssh-keyscan -p ${{ secrets.DEPLOY_PORT }} \
             ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy via SSH (git pull + docker compose)
+      - name: Deploy via SSH (git pull + docker compose build)
         run: |
           ssh -p ${{ secrets.DEPLOY_PORT }} \
               ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
             set -e
 
-            echo "▶ Move to app directory"
-            cd /home/deploy/app
+            echo "▶ Move to MCP Server directory"
+            cd /home/deploy/McpServer
 
             echo "▶ Git pull"
             git pull origin main
 
-            echo "▶ Docker compose pull"
-            docker compose pull
-
-            echo "▶ Docker compose up"
+            echo "▶ Docker compose up (build)"
             docker compose up -d --build
 
             echo "▶ Docker status"
