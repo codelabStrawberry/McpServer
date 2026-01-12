@@ -216,3 +216,8 @@ docker rm $(docker ps -aq)
 docker rmi -f $(docker images -aq)
 
 sudo docker stop mcp-server ollama chroma
+
+1️⃣ Docker 패키지 제거
+sudo apt-get remove --purge -y docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras
+sudo apt-get remove --purge -y python3-compose python3-docker python3-dockerpty
+sudo apt autoremove -y
