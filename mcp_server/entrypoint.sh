@@ -1,16 +1,19 @@
 #!/bin/sh
-set -e
+
+echo "▶ Waiting for Ollama..."
+until curl -sf "$OLLAMA_BASE_URL/api/tags" > /dev/null; do
+  sleep 2
+done
 
 echo "▶ Pull Ollama chat model: $OLLAMA_CHAT_MODEL"
-curl -s -X POST "$OLLAMA_BASE_URL/api/pull" \
+curl -X POST "$OLLAMA_BASE_URL/api/pull" \
   -H "Content-Type: application/json" \
-  -d "{\"name\":\"$OLLAMA_CHAT_MODEL\"}"
+  -d "{\"name\":\"$OLLAMA_CHAT_MODEL\"}" || true
 
 echo "▶ Pull Ollama embedding model: $OLLAMA_EMBED_MODEL"
-curl -s -X POST "$OLLAMA_BASE_URL/api/pull" \
+curl -X POST "$OLLAMA_BASE_URL/api/pull" \
   -H "Content-Type: application/json" \
-  -d "{\"name\":\"$OLLAMA_EMBED_MODEL\"}"
+  -d "{\"name\":\"$OLLAMA_EMBED_MODEL\"}" || true
 
 echo "▶ Start MCP Server"
 exec uvicorn main:app --host 0.0.0.0 --port 3333
-# exec python -m uvicorn main:app  --host 0.0.0.0  --port 3333  --log-level debug

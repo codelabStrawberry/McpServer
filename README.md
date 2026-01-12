@@ -182,3 +182,29 @@ Client (curl / MCP)
             ├─ ChromaDB 검색
             └─ Ollama LLM 응답
 
+
+## 🧠  redis 설치
+
+docker run -d --name redis7 -p 6379:6379 redis:7
+
+## 🧠  ollama host 중지
+sudo systemctl stop ollama
+sudo systemctl disable ollama
+ss -lntp | grep 11434   # 출력 없어야 함
+
+docker compose down -v
+docker compose up -d --build
+
+## 🧠  ollama chroma 강제 중지
+docker inspect ollama --format '{{.State.Pid}}'
+docker inspect chroma --format '{{.State.Pid}}'
+
+sudo kill -9 12345(PID)
+
+docker rm -f ollama chroma
+
+
+docker ps
+docker logs ollama --tail 20
+docker logs chroma --tail 20
+docker logs mcp-server --tail 30
