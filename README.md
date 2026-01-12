@@ -208,3 +208,11 @@ docker ps
 docker logs ollama --tail 20
 docker logs chroma --tail 20
 docker logs mcp-server --tail 30
+
+
+docker stop $(docker ps -aq)
+docker rm $(docker ps -aq)
+
+docker rmi -f $(docker images -aq)
+
+sudo docker stop mcp-server ollama chroma
