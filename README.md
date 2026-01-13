@@ -128,9 +128,9 @@ docker exec -it ollama ollama pull nomic-embed-text
 ## 🐳 Docker 디버깅 명령어
 
 ```bash
-docker-compose build
-docker-compose up -d
-docker-compose up --build -d
+docker compose build
+docker compose up -d
+docker compose up --build -d
 docker compose build --no-cache
 ```
 
@@ -278,4 +278,17 @@ docker exec -it ollama /usr/bin/ollama rm nomic-embed-text
 
 docker exec -it ollama /usr/bin/ollama list
 
+```
+
+---
+
+## ❌ docker-compose-plugin 필요한 경우 (아직 초기 서버)
+
+```bash
+docker: command not found
+docker: Cannot connect to the Docker daemon
+docker compose: command not found
+
+sudo apt update
+sudo apt install docker docker-compose-plugin
 ```
