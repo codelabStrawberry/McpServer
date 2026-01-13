@@ -4,21 +4,31 @@ set -e
 
 echo "▶ Installing Ollama CLI wrapper (Docker-only)"
 
-# docker 필수
+# --------------------------------------------------
+# 1. Docker 필수 체크
+# --------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
   echo "❌ Docker is not installed"
   exit 1
 fi
 
-# host ollama 흔적 제거
+# --------------------------------------------------
+# 2. Host Ollama 완전 제거 (있을 경우)
+# --------------------------------------------------
+echo "▶ Removing host Ollama (if exists)..."
+
 sudo systemctl stop ollama 2>/dev/null || true
 sudo systemctl disable ollama 2>/dev/null || true
 sudo rm -f /etc/systemd/system/ollama.service
 sudo rm -rf /usr/local/lib/ollama
 sudo rm -f /usr/local/bin/ollama
-sudo systemctl daemon-reload
+sudo systemctl daemon-reload || true
 
-# docker exec wrapper 생성
+# --------------------------------------------------
+# 3. Docker exec 기반 Ollama CLI wrapper 생성
+# --------------------------------------------------
+echo "▶ Installing Docker-based Ollama CLI wrapper..."
+
 sudo tee /usr/local/bin/ollama >/dev/null <<'WRAP'
 #!/bin/bash
 set -e
@@ -36,12 +46,20 @@ WRAP
 
 sudo chmod +x /usr/local/bin/ollama
 
+# --------------------------------------------------
+# 4. 설치 결과 안내
+# --------------------------------------------------
 echo
 echo "✅ Host Ollama server NOT installed"
 echo "✅ systemd ollama REMOVED"
+echo "✅ Docker-only Ollama architecture enforced"
 echo "✅ CLI wrapper installed at /usr/local/bin/ollama"
 echo
-echo "Usage:"
+echo "Usage (host):"
 echo "  ollama list"
 echo "  ollama pull gemma3:1b"
+echo
+echo "Note:"
+echo "  - Models are stored in the Ollama container volume"
+echo "  - MCP Server should use Ollama REST API (not CLI)"
 EOF

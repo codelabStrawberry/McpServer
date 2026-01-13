@@ -268,9 +268,13 @@ sudo ./ollama_install.sh
 ## 🐳 컨테이너 안 or 외부에서 모델 pull
 
 ```bash
-
+<생성>
 docker exec -it ollama /usr/bin/ollama pull gemma3:1b
 docker exec -it ollama /usr/bin/ollama pull nomic-embed-text
+
+<제거>
+docker exec -it ollama /usr/bin/ollama rm gemma3:1b
+docker exec -it ollama /usr/bin/ollama rm nomic-embed-text
 
 docker exec -it ollama /usr/bin/ollama list
 
