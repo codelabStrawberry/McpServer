@@ -144,10 +144,6 @@ docker compose build --no-cache
 
 ### 💬 Chat (LLM 단독)
 
-```cmd
-curl -X POST http://localhost:3333/mcp/tools/chat -H "Content-Type: application/json; charset=utf-8" -d "{\"prompt\":\"MCP 서버가 무엇인지 설명해줘\"}"
-```
-
 ---
 
 ### 📥 문서 추가 (RAG 저장)
@@ -182,6 +178,8 @@ Client (curl / MCP)
             ├─ ChromaDB 검색
             └─ Ollama LLM 응답
 
+
+```
 
 ## 🧠  redis 설치
 
@@ -221,3 +219,59 @@ sudo docker stop mcp-server ollama chroma
 sudo apt-get remove --purge -y docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras
 sudo apt-get remove --purge -y python3-compose python3-docker python3-dockerpty
 sudo apt autoremove -y
+
+
+docker run -it --rm --dns=8.8.8.8 --entrypoint /bin/bash ollama/ollama:latest
+
+docker run -it --rm \
+  --dns=8.8.8.8 \
+  -v ollama:/root/.ollama \
+  --entrypoint /bin/bash \
+  ollama/ollama:latest
+
+# 컨테이너 안에서
+/usr/bin/ollama serve &
+/usr/bin/ollama pull gemma3:1b
+/usr/bin/ollama pull nomic-embed-text
+/usr/bin/ollama list
+
+
+# 1️⃣ Ollama 서버 백그라운드 실행
+/usr/bin/ollama serve &
+
+# 2️⃣ gemma3:1b 모델 설치
+/usr/bin/ollama pull gemma3:1b
+
+# 3️⃣ nomic-embed-text 모델 설치
+/usr/bin/ollama pull nomic-embed-text
+
+# 4️⃣ 설치된 모델 확인
+/usr/bin/ollama list
+
+---
+
+---
+
+## 🐳 Docker 디버깅 명령어
+
+---
+
+chmod +x ollama_install.sh
+
+./ollama_install.sh
+
+sudo ./ollama_install.sh
+---
+
+---
+
+## 🐳 컨테이너 안 or 외부에서 모델 pull
+
+```bash
+
+docker exec -it ollama /usr/bin/ollama pull gemma3:1b
+docker exec -it ollama /usr/bin/ollama pull nomic-embed-text
+
+docker exec -it ollama /usr/bin/ollama list
+
+```

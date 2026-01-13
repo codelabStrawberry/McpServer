@@ -1,20 +1,47 @@
+cat <<'EOF' > ollama_install.sh
 #!/bin/bash
 set -e
 
-echo "▶ Installing Ollama CLI on Ubuntu..."
+echo "▶ Installing Ollama CLI wrapper (Docker-only)"
 
-# 필수 패키지
-apt-get update && apt-get install -y curl unzip ca-certificates
+# docker 필수
+if ! command -v docker >/dev/null 2>&1; then
+  echo "❌ Docker is not installed"
+  exit 1
+fi
 
-# Ollama CLI 설치
-curl -sSL https://ollama.com/install.sh | sh
+# host ollama 흔적 제거
+sudo systemctl stop ollama 2>/dev/null || true
+sudo systemctl disable ollama 2>/dev/null || true
+sudo rm -f /etc/systemd/system/ollama.service
+sudo rm -rf /usr/local/lib/ollama
+sudo rm -f /usr/local/bin/ollama
+sudo systemctl daemon-reload
 
-# PATH 설정
-export PATH="$HOME/.ollama/bin:$PATH"
+# docker exec wrapper 생성
+sudo tee /usr/local/bin/ollama >/dev/null <<'WRAP'
+#!/bin/bash
+set -e
 
-# 설치 확인
-ollama version
+CONTAINER_NAME=ollama
 
-echo "▶ Ollama CLI installed! You can now run:"
-echo "   ollama pull <model_name>"
-echo "   ollama list"
+if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+  echo "❌ Ollama container is not running"
+  echo "   → docker compose up -d ollama"
+  exit 1
+fi
+
+exec docker exec -it "$CONTAINER_NAME" ollama "$@"
+WRAP
+
+sudo chmod +x /usr/local/bin/ollama
+
+echo
+echo "✅ Host Ollama server NOT installed"
+echo "✅ systemd ollama REMOVED"
+echo "✅ CLI wrapper installed at /usr/local/bin/ollama"
+echo
+echo "Usage:"
+echo "  ollama list"
+echo "  ollama pull gemma3:1b"
+EOF
