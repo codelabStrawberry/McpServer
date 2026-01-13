@@ -185,6 +185,19 @@ Client (curl / MCP)
 
 docker run -d --name redis7 -p 6379:6379 redis:7
 
+## 🧠  mysql 설치
+
+docker run -d \
+  --name mysql8 \
+  -p 3306:3306 \
+  -e MYSQL_ROOT_PASSWORD=1234 \
+  -e MYSQL_DATABASE=board_db \
+  -e MYSQL_USER=user \
+  -e MYSQL_PASSWORD=pass \
+  -v mysql8-data:/var/lib/mysql \
+  --restart unless-stopped \
+  mysql:8.0
+
 ## 🧠  ollama host 중지
 sudo systemctl stop ollama
 sudo systemctl disable ollama
