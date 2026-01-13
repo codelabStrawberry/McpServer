@@ -1,7 +1,7 @@
 # backend/api/routes/chat.py
 
 from __future__ import annotations
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from urllib.parse import urlparse
@@ -24,7 +24,7 @@ PROMPT_KEY = "session:prompt:{sid}"
 HISTORY_KEY = "session:history:{sid}"
 STARTED_KEY = "session:started:{sid}"
 
-READY_MESSAGE = "채팅 준비 완료! 아래에 '시작하기'라고 입력하면 면접을 시작합니다."
+READY_MESSAGE = "모의 면접 준비 완료! 아래에 '시작하기'라고 입력하면 면접을 시작합니다."
 
 class MessageReq(BaseModel):
     sessionId: str
@@ -55,12 +55,14 @@ def _build_system_prompt(job_text: str, resume_text: str) -> str:
     resume_text = _clean_text(resume_text)
 
     return f"""
-당신은 면접관이다. 아래 규칙을 엄격히 따른다.
+당신은 전문적인 면접관이다. 아래 규칙을 엄격히 따른다.
 
 [역할]
 - 사용자가 지원한 채용공고(job_text)와 자기소개서 요약(resume_text)을 기반으로 모의 면접을 진행한다.
 - 질문은 1개씩만 한다.
-- 사용자의 답변을 받으면 간단한 피드백과 더 나은 답변 예시를 제공한 뒤 다음 질문을 한다.
+- 사용자의 답변을 받으면 간단한 피드백과 더 나은 답변 예시를 제공한다.
+- 그리고 추가질문이 필요하다고 판단되면 답변과 관련된 질문을 한다.
+- 대답이 마무리가 되었다고 판단되면 새로운 질문을 1개 한다.
 - 한국어로 대답한다.
 
 [규칙]
@@ -149,7 +151,39 @@ async def start(
         },
     }
 
+@router.get("/history")
+async def history(sessionId: str = Query(...)):
+    redis_client = await get_redis_client()
+    if redis_client is None:
+        raise HTTPException(status_code=500, detail="Redis 연결 실패")
 
+    sid = (sessionId or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="sessionId가 필요합니다.")
+
+    history_json = await redis_client.get(HISTORY_KEY.format(sid=sid))
+    if not history_json:
+        # 세션이 없거나 만료된 경우
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    # bytes -> str
+    if isinstance(history_json, (bytes, bytearray)):
+        history_json = history_json.decode("utf-8")
+
+    started_b = await redis_client.get(STARTED_KEY.format(sid=sid))
+    started_s = ""
+    if started_b is None:
+        started_s = "False"
+    elif isinstance(started_b, (bytes, bytearray)):
+        started_s = started_b.decode("utf-8")
+    else:
+        started_s = str(started_b)
+
+    return {
+        "sessionId": sid,
+        "started": started_s == "True",
+        "history": json.loads(history_json),
+    }
 
 @router.post("/message")
 async def message(req: MessageReq):
@@ -158,7 +192,6 @@ async def message(req: MessageReq):
         raise HTTPException(status_code=500, detail="Redis 연결 실패")
 
     sid = (req.sessionId or "").strip()
-    print("sid", sid)
     user_text = (req.message or "").strip()
 
     if not sid:
@@ -168,6 +201,27 @@ async def message(req: MessageReq):
     system_prompt_b = await redis_client.get(PROMPT_KEY.format(sid=sid))
     if not system_prompt_b:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다. 먼저 /chat/start를 호출하세요.")
+
+# ✅ bytes -> str
+    if isinstance(system_prompt_b, (bytes, bytearray)):
+        system_prompt = system_prompt_b.decode("utf-8")
+    else:
+        system_prompt = str(system_prompt_b)
+
+    # history 로드
+    history_json = await redis_client.get(HISTORY_KEY.format(sid=sid))
+    if history_json and isinstance(history_json, (bytes, bytearray)):
+        history_json = history_json.decode("utf-8")
+    history = json.loads(history_json) if history_json else []
+    history.append({"role": "user", "content": user_text})
+
+    # ✅ started bytes/string 안전 처리
+    started_b = await redis_client.get(STARTED_KEY.format(sid=sid))
+    if started_b is None:
+        started = False
+    else:
+        started_s = started_b.decode("utf-8") if isinstance(started_b, (bytes, bytearray)) else str(started_b)
+        started = started_s == "True"
 
     # Redis는 bytes를 반환할 수 있으므로 문자열로 변환
     system_prompt = system_prompt_b

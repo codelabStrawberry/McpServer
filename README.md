@@ -128,9 +128,9 @@ docker exec -it ollama ollama pull nomic-embed-text
 ## 🐳 Docker 디버깅 명령어
 
 ```bash
-docker-compose build
-docker-compose up -d
-docker-compose up --build -d
+docker compose build
+docker compose up -d
+docker compose up --build -d
 docker compose build --no-cache
 ```
 
@@ -143,10 +143,6 @@ docker compose build --no-cache
 ---
 
 ### 💬 Chat (LLM 단독)
-
-```cmd
-curl -X POST http://localhost:3333/mcp/tools/chat -H "Content-Type: application/json; charset=utf-8" -d "{\"prompt\":\"MCP 서버가 무엇인지 설명해줘\"}"
-```
 
 ---
 
@@ -182,3 +178,130 @@ Client (curl / MCP)
             ├─ ChromaDB 검색
             └─ Ollama LLM 응답
 
+
+```
+
+## 🧠  redis 설치
+
+docker run -d --name redis7 -p 6379:6379 redis:7
+
+## 🧠  mysql 설치
+
+docker run -d \
+  --name mysql8 \
+  -p 3306:3306 \
+  -e MYSQL_ROOT_PASSWORD=1234 \
+  -e MYSQL_DATABASE=board_db \
+  -e MYSQL_USER=user \
+  -e MYSQL_PASSWORD=pass \
+  -v mysql8-data:/var/lib/mysql \
+  --restart unless-stopped \
+  mysql:8.0
+
+## 🧠  ollama host 중지
+sudo systemctl stop ollama
+sudo systemctl disable ollama
+ss -lntp | grep 11434   # 출력 없어야 함
+
+docker compose down -v
+docker compose up -d --build
+
+## 🧠  ollama chroma 강제 중지
+docker inspect ollama --format '{{.State.Pid}}'
+docker inspect chroma --format '{{.State.Pid}}'
+
+sudo kill -9 12345(PID)
+
+docker rm -f ollama chroma
+
+
+docker ps
+docker logs ollama --tail 20
+docker logs chroma --tail 20
+docker logs mcp-server --tail 30
+
+
+docker stop $(docker ps -aq)
+docker rm $(docker ps -aq)
+
+docker rmi -f $(docker images -aq)
+
+sudo docker stop mcp-server ollama chroma
+
+1️⃣ Docker 패키지 제거
+sudo apt-get remove --purge -y docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras
+sudo apt-get remove --purge -y python3-compose python3-docker python3-dockerpty
+sudo apt autoremove -y
+
+
+docker run -it --rm --dns=8.8.8.8 --entrypoint /bin/bash ollama/ollama:latest
+
+docker run -it --rm \
+  --dns=8.8.8.8 \
+  -v ollama:/root/.ollama \
+  --entrypoint /bin/bash \
+  ollama/ollama:latest
+
+# 컨테이너 안에서
+/usr/bin/ollama serve &
+/usr/bin/ollama pull gemma3:1b
+/usr/bin/ollama pull nomic-embed-text
+/usr/bin/ollama list
+
+
+# 1️⃣ Ollama 서버 백그라운드 실행
+/usr/bin/ollama serve &
+
+# 2️⃣ gemma3:1b 모델 설치
+/usr/bin/ollama pull gemma3:1b
+
+# 3️⃣ nomic-embed-text 모델 설치
+/usr/bin/ollama pull nomic-embed-text
+
+# 4️⃣ 설치된 모델 확인
+/usr/bin/ollama list
+
+---
+
+---
+
+## 🐳 Docker 디버깅 명령어
+
+---
+
+chmod +x ollama_install.sh
+
+./ollama_install.sh
+
+sudo ./ollama_install.sh
+---
+
+---
+
+## 🐳 컨테이너 안 or 외부에서 모델 pull
+
+```bash
+<생성>
+docker exec -it ollama /usr/bin/ollama pull gemma3:1b
+docker exec -it ollama /usr/bin/ollama pull nomic-embed-text
+
+<제거>
+docker exec -it ollama /usr/bin/ollama rm gemma3:1b
+docker exec -it ollama /usr/bin/ollama rm nomic-embed-text
+
+docker exec -it ollama /usr/bin/ollama list
+
+```
+
+---
+
+## ❌ docker-compose-plugin 필요한 경우 (아직 초기 서버)
+
+```bash
+docker: command not found
+docker: Cannot connect to the Docker daemon
+docker compose: command not found
+
+sudo apt update
+sudo apt install docker docker-compose-plugin
+```
