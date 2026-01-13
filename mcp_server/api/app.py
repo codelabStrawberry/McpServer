@@ -59,7 +59,7 @@ app.add_middleware(
 
 
 app.include_router(chat.router, prefix="/chat")
-app.include_router(jobfit_route.router, prefix="/jobfit")
+app.include_router(jobfit_route.router, prefix="")
 app.include_router(rag.router, prefix="/mcp/tools")
 app.include_router(docs.router, prefix="/mcp/tools")
 app.include_router(resume_analyze.router, prefix="/resume")
