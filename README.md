@@ -291,6 +291,9 @@ docker exec -it ollama /usr/bin/ollama rm nomic-embed-text
 
 docker exec -it ollama /usr/bin/ollama list
 
+<윈도우>
+MSYS_NO_PATHCONV=1 docker exec -it ollama /usr/bin/ollama list
+
 ```
 
 ---

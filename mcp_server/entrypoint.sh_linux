@@ -23,6 +23,7 @@ pull_if_missing () {
 
 pull_if_missing "$OLLAMA_CHAT_MODEL"
 pull_if_missing "$OLLAMA_EMBED_MODEL"
+pull_if_missing "$OLLAMA_CRAWL_MODEL"
 
 echo "▶ Start MCP Server"
 exec uvicorn main:app --host 0.0.0.0 --port 3333
