@@ -10,14 +10,8 @@ services:
       - ollama:/root/.ollama
     restart: unless-stopped
 
-    # 🔥 GPU 핵심 설정
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # ✅ GPU 설정 (Compose 표준)
+    gpus: all
 
     environment:
       - OLLAMA_CLI_ENABLE=true
