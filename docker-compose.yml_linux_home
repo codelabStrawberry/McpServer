@@ -10,6 +10,12 @@ services:
       - ollama:/root/.ollama
     restart: unless-stopped
 
+    # ✅ 이것만 있으면 충분
+    gpus: all
+
+    environment:
+      - OLLAMA_CLI_ENABLE=true
+
   chroma:
     image: chromadb/chroma:latest
     container_name: chroma
@@ -32,7 +38,7 @@ services:
     volumes:
       - ./data/docs:/app/data/docs
 
-    # 🔥 여기 추가
+   # 🔥 여기 추가
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

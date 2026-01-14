@@ -308,3 +308,55 @@ docker compose: command not found
 sudo apt update
 sudo apt install docker docker-compose-plugin
 ```
+
+
+docker compose down -v
+docker compose up -d --build
+
+4️⃣ GPU 붙었는지 다시 확인 (정상 기대값)
+docker inspect ollama --format='{{.HostConfig.DeviceRequests}}'
+
+2️⃣ 해결책 (정답) — NVIDIA Container Toolkit 설치
+✅ Ubuntu 기준 (너 환경에 맞음)
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+
+
+설치 후 반드시 Docker 재시작:
+
+sudo systemctl restart docker
+
+
+⚠️ 이거 안 하면 100% 다시 실패함
+
+3️⃣ 설치 확인 (중요)
+docker info | grep -i nvidia
+
+
+정상 출력 예시:
+
+Runtimes: nvidia runc
+
+
+✅ 해결 절차 (그대로 복사해서 실행)
+1️⃣ NVIDIA 공식 GPG 키 등록
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+2️⃣ NVIDIA Container Toolkit 저장소 추가
+curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+3️⃣ 패키지 목록 갱신
+sudo apt-get update
+
+4️⃣ 이제 설치 (여기서 성공해야 함)
+sudo apt-get install -y nvidia-container-toolkit
+
+5️⃣ Docker에 NVIDIA 런타임 연결 (중요 ⚠️)
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+
+이 단계는 필수
