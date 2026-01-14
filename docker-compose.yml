@@ -32,6 +32,10 @@ services:
     volumes:
       - ./data/docs:/app/data/docs
 
+    # 🔥 여기 추가
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   ollama:
   chroma:

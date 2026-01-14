@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # .env 로드 (필요 시)
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+REDIS_URL = os.getenv("REDIS_URL", "redis://host.docker.internal:6379/0")
 _redis_client = None  # lazy initialization
 
 async def get_redis_client():
