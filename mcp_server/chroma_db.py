@@ -57,6 +57,34 @@ def split_text(text: str, chunk_size=500, overlap=50):
     return chunks
 
 
+def get_document_by_doc_id(doc_id: str) -> list[str]:
+    result = collection.get(
+        where={"doc_id": doc_id}
+    )
+
+    docs = result.get("documents", [])
+    if not docs:
+        return []
+
+    return docs
+
+
+async def search_in_document(doc_id: str, query: str, k: int = 3) -> list[str]:
+    vector = await ollama_embed(query)
+
+    result = collection.query(
+        query_embeddings=[vector],
+        n_results=k,
+        where={"doc_id": doc_id}
+    )
+
+    docs = result.get("documents")
+    if not docs or not docs[0]:
+        return []
+
+    return docs[0]
+
+
 async def add_document(doc_id: str, full_text: str):
     chunks = split_text(full_text)
     if not chunks:
@@ -70,7 +98,8 @@ async def add_document(doc_id: str, full_text: str):
     collection.add(
         ids=[f"{doc_id}_{i}" for i in range(len(chunks))],
         documents=chunks,
-        embeddings=vectors
+        embeddings=vectors,
+        metadatas=[{"doc_id": doc_id, "chunk_index": i} for i in range(len(chunks))]
     )
     print(f"✅ added to chroma: {doc_id}", flush=True)
 
