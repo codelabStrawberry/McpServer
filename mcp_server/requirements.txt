@@ -10,3 +10,5 @@ pdfplumber
 redis>=5.0.0
 pillow
 html2text
+
+aiomysql
