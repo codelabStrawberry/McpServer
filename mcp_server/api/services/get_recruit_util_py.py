@@ -181,31 +181,31 @@ async def extract_jd_markdown(jd_url, client):
         if not body:
             return ""
 
-        # img_tags = body.find_all('img')
+        img_tags = body.find_all('img')
 
-        # # ocr 작업 병렬 실행
-        # ocr_tasks = []
-        # valid_imgs = []
+        # ocr 작업 병렬 실행
+        ocr_tasks = []
+        valid_imgs = []
 
-        # for img in img_tags:
-        #     src = img.get('src')
-        #     if src and not any(k in src.lower() for k in ['icon', 'logo', 'blank', 'pixel', 'watermark']):
-        #         full_img_url = format_url(src)
-        #         valid_imgs.append(img)
-        #         ocr_tasks.append(perform_qwen3vl_ocr(full_img_url, client))
-        #     else:
-        #         img.decompose()
+        for img in img_tags:
+            src = img.get('src')
+            if src and not any(k in src.lower() for k in ['icon', 'logo', 'blank', 'pixel', 'watermark']):
+                full_img_url = format_url(src)
+                valid_imgs.append(img)
+                ocr_tasks.append(perform_qwen3vl_ocr(full_img_url, client))
+            else:
+                img.decompose()
 
-        # # ocr 작업 실행 후 결과 대기
-        # print(f"총 {len(ocr_tasks)}개의 이미지 병렬 처리 시작...")
-        # ocr_results = await asyncio.gather(*ocr_tasks)
+        # ocr 작업 실행 후 결과 대기
+        print(f"총 {len(ocr_tasks)}개의 이미지 병렬 처리 시작...")
+        ocr_results = await asyncio.gather(*ocr_tasks)
 
-        # # 이미지 태그를 추출된 텍스트로 교체
-        # for img, ocr_text in zip(valid_imgs, ocr_results):
-        #     if ocr_text:
-        #         img.replace_with(soup.new_string(ocr_text))
-        #     else:
-        #         img.decompose()
+        # 이미지 태그를 추출된 텍스트로 교체
+        for img, ocr_text in zip(valid_imgs, ocr_results):
+            if ocr_text:
+                img.replace_with(soup.new_string(ocr_text))
+            else:
+                img.decompose()
 
         # 마크다운 형태로 변환
         h = html2text.HTML2Text()
