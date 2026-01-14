@@ -4,6 +4,11 @@ from ollama import ollama_chat
 from pathlib import Path
 import uuid
 from api.services.extract import extract_pdf_text  # 앞서 작성한 PDF 추출 함수
+from api.services.crawl import crawl_url
+from starlette.concurrency import run_in_threadpool
+
+import re
+from collections import defaultdict
 
 router = APIRouter()
 
@@ -29,6 +34,27 @@ async def read_pdf_text(file: UploadFile) -> str:
 
     return text
 
+def find_sentences_with_keywords(text, keywords):
+    """
+    text: 긴 문자열 (한글도 가능)
+    keywords: 찾고 싶은 키워드 리스트 (한글 포함 가능)
+    return: {키워드: [문장1, 문장2, ...], ...} 형태의 딕셔너리
+    """
+    # 한글에서는 줄바꿈도 문장 구분으로 포함
+    sentences = re.split(r'(?<=[.!?])\s*', text)
+    
+    result = defaultdict(list)
+    
+    for sentence in sentences:
+        lower_sentence = sentence.lower()
+        for kw in keywords:
+            if kw.lower() in lower_sentence:
+                result[kw].append(sentence.strip())
+    
+    return dict(result)
+
+
+keywords = ["모집", "자격", "우대"]
 
 @router.post("/jobfit")
 async def jobfit(
@@ -44,6 +70,7 @@ async def jobfit(
     with open(save_path, "wb") as f:
         f.write(await coverLetter.read())
 
+    
     print("job:", job)
     print("url:", url)
     print("filename:", coverLetter.filename)
@@ -51,6 +78,19 @@ async def jobfit(
     
     pdftext = await read_pdf_text(coverLetter)
     print("pdftext:", pdftext[:100])
+    
+     # crawl
+    job_text = await run_in_threadpool(crawl_url, url)
+    print("crawl:", job_text[:300])
+    
+    matched_sentences = find_sentences_with_keywords(job_text, keywords)
+    for kw, sentences in matched_sentences.items():
+        print(f"{kw} 관련 문장 ({len(sentences)}개):")
+        for s in sentences:
+            print("-", s)
+        print()
+    
+    
 
     # 2️⃣ AI 프롬프트 생성
     final_prompt = f"""
