@@ -10,7 +10,7 @@ services:
       - ollama:/root/.ollama
     restart: unless-stopped
 
-    # ✅ GPU 설정 (Compose 표준)
+    # ✅ 이것만 있으면 충분
     gpus: all
 
     environment:
