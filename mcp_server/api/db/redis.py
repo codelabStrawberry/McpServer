@@ -5,17 +5,21 @@ from dotenv import load_dotenv
 
 load_dotenv()  # .env 로드 (필요 시)
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://host.docker.internal:6379/0")
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 _redis_client = None  # lazy initialization
 
 async def get_redis_client():
     global _redis_client
-    if _redis_client is None:
-        _redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-        try:
-            await _redis_client.ping()
-            print("✅ Redis 연결 성공 (lazy init)!")
-        except Exception as e:
-            print(f"❌ Redis 연결 실패: {e}")
-            _redis_client = None
+    if _redis_client:
+        return _redis_client
+
+    try:
+        client = redis.from_url(REDIS_URL, decode_responses=True)
+        await client.ping()
+        print("✅ Redis 연결 성공")
+        _redis_client = client
+    except Exception as e:
+        print(f"⚠️ Redis 비활성화: {e}")
+        _redis_client = None
+
     return _redis_client
