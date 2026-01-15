@@ -6,6 +6,7 @@ import uuid
 from api.services.extract import extract_pdf_text  # 앞서 작성한 PDF 추출 함수
 from api.services.crawl import crawl_url
 from starlette.concurrency import run_in_threadpool
+from api.services.get_single_recruit import get_single_recruit
 
 import re
 from collections import defaultdict
@@ -56,6 +57,38 @@ def find_sentences_with_keywords(text, keywords):
 
 keywords = ["모집", "자격", "우대"]
 
+def extract_language_text(text: str) -> str:
+    """
+    크롤링된 텍스트에서
+    - 한글, 영어만 유지
+    - 특수문자 제거
+    - 공백 정리
+    """
+    # 1. 한글, 영어, 공백만 남기기
+    cleaned = re.sub(r"[^가-힣a-zA-Z\s]", " ", text)
+
+    # 2. 연속 공백 제거
+    cleaned = re.sub(r"\s+", " ", cleaned)
+
+    return cleaned.strip()
+
+def extract_job_text(job: dict) -> str:
+    fields = [
+        job.get("title", ""),
+        job.get("company", ""),
+        " ".join(job.get("job_category", [])),
+        job.get("content", "")
+    ]
+
+    text = " ".join(fields)
+
+    cleaned = re.sub(r"[^가-힣a-zA-Z\s]", " ", text)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+
+    return cleaned.strip()
+
+
+
 @router.post("/jobfit")
 async def jobfit(
     job: str = Form(...),
@@ -80,16 +113,13 @@ async def jobfit(
     print("pdftext:", pdftext[:100])
     
      # crawl
-    job_text = await run_in_threadpool(crawl_url, url)
-    print("crawl:", job_text[:300])
-    
-    matched_sentences = find_sentences_with_keywords(job_text, keywords)
-    for kw, sentences in matched_sentences.items():
-        print(f"{kw} 관련 문장 ({len(sentences)}개):")
-        for s in sentences:
-            print("-", s)
-        print()
-    
+    job_text = await get_single_recruit(url)
+    if not job_text:
+        print("crawl: EMPTY or None")
+    else:
+        print(f"crawl: {job_text}")
+        job_text = extract_job_text(job_text)
+        print(f"crawl2: {job_text}")   
     
 
     # 2️⃣ AI 프롬프트 생성
@@ -99,6 +129,10 @@ async def jobfit(
 
 [직무]
 {job}
+
+[취업공고]
+{job_text}
+여기에 지원할꺼야!!
 
 [자기소개서]
 {pdftext}

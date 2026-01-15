@@ -8,3 +8,7 @@ python-multipart==0.0.9
 beautifulsoup4==4.12.3
 pdfplumber
 redis>=5.0.0
+pillow
+html2text
+
+aiomysql
