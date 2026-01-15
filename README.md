@@ -185,7 +185,15 @@ Client (curl / MCP)
 
 docker run -d --name redis7 -p 6379:6379 redis:7
 
-## 🧠  mysql 설치
+# Docker / Ollama / MySQL 운영 및 정리 명령 모음
+
+이 문서는 MySQL 컨테이너 실행, Ollama Host/Container 제어,
+Chroma 강제 종료, Docker 전체 정리 및 테스트용 실행 명령을
+하나의 Markdown 파일로 정리한 것입니다.
+
+---
+
+## 🧠 MySQL 설치 (Docker)
 
 docker run -d \
   --name mysql8 \
@@ -198,49 +206,121 @@ docker run -d \
   --restart unless-stopped \
   mysql:8.0
 
-## 🧠  ollama host 중지
+---
+
+## 🧠 Ollama Host 서비스 중지 (중요)
+
+Host에 설치된 Ollama 서비스는 Docker Ollama와 충돌하므로
+반드시 중지 및 비활성화해야 합니다.
+
 sudo systemctl stop ollama
 sudo systemctl disable ollama
-ss -lntp | grep 11434   # 출력 없어야 함
+
+포트 확인 (출력 없어야 정상):
+
+ss -lntp | grep 11434
+
+---
+
+## Docker Compose 재시작
 
 docker compose down -v
 docker compose up -d --build
 
-## 🧠  ollama chroma 강제 중지
+---
+
+## 🧠 Ollama / Chroma 강제 중지 (PID 기준)
+
+컨테이너 PID 확인:
+
 docker inspect ollama --format '{{.State.Pid}}'
 docker inspect chroma --format '{{.State.Pid}}'
 
-sudo kill -9 12345(PID)
+PID가 남아 있는 경우 강제 종료:
+
+sudo kill -9 <PID>
+
+컨테이너 강제 제거:
 
 docker rm -f ollama chroma
 
+---
+
+## 컨테이너 상태 및 로그 확인
 
 docker ps
+
 docker logs ollama --tail 20
 docker logs chroma --tail 20
 docker logs mcp-server --tail 30
 
+---
+
+## Docker 전체 컨테이너 중지 / 제거
+
+모든 컨테이너 중지:
 
 docker stop $(docker ps -aq)
+
+모든 컨테이너 제거:
+
 docker rm $(docker ps -aq)
+
+모든 이미지 제거:
 
 docker rmi -f $(docker images -aq)
 
+특정 컨테이너 중지:
+
 sudo docker stop mcp-server ollama chroma
 
-1️⃣ Docker 패키지 제거
-sudo apt-get remove --purge -y docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras
-sudo apt-get remove --purge -y python3-compose python3-docker python3-dockerpty
+---
+
+## Docker 패키지 완전 제거 (Ubuntu)
+
+### 1️⃣ Docker 관련 패키지 제거
+
+sudo apt-get remove --purge -y \
+  docker-ce \
+  docker-ce-cli \
+  docker-buildx-plugin \
+  docker-compose-plugin \
+  docker-ce-rootless-extras
+
+sudo apt-get remove --purge -y \
+  python3-compose \
+  python3-docker \
+  python3-dockerpty
+
 sudo apt autoremove -y
 
+---
 
-docker run -it --rm --dns=8.8.8.8 --entrypoint /bin/bash ollama/ollama:latest
+## Ollama 이미지 직접 실행 (디버깅용)
+
+DNS 지정 + bash 진입:
+
+docker run -it --rm \
+  --dns=8.8.8.8 \
+  --entrypoint /bin/bash \
+  ollama/ollama:latest
+
+볼륨 포함 실행:
 
 docker run -it --rm \
   --dns=8.8.8.8 \
   -v ollama:/root/.ollama \
   --entrypoint /bin/bash \
   ollama/ollama:latest
+
+---
+
+## 참고
+
+- Host Ollama + Docker Ollama 동시 실행 ❌
+- 11434 포트 충돌 시 GPU/서버 모두 정상 동작 안 함
+- 문제가 생기면 컨테이너 → 이미지 → Docker 순으로 정리하는 것이 가장 확실함
+
 
 # 컨테이너 안에서
 /usr/bin/ollama serve &
@@ -296,8 +376,6 @@ MSYS_NO_PATHCONV=1 docker exec -it ollama /usr/bin/ollama list
 
 ```
 
----
-
 ## ❌ docker-compose-plugin 필요한 경우 (아직 초기 서버)
 
 ```bash
@@ -308,3 +386,102 @@ docker compose: command not found
 sudo apt update
 sudo apt install docker docker-compose-plugin
 ```
+
+
+# Ollama Docker GPU 설정 가이드 (Ubuntu + NVIDIA)
+
+이 문서는 Docker 환경에서 Ollama 컨테이너가
+NVIDIA GPU를 정상적으로 인식하도록 설정하는 전체 절차를
+하나의 Markdown 파일로 정리한 것입니다.
+
+---
+
+## 사전 조건
+
+- Ubuntu
+- NVIDIA GPU
+- NVIDIA Driver 설치 완료
+- Docker / Docker Compose 설치 완료
+- 호스트에서 nvidia-smi 정상 동작
+
+nvidia-smi
+
+---
+
+## GPU가 컨테이너에 전달되었는지 확인
+
+docker inspect ollama --format='{{.HostConfig.DeviceRequests}}'
+
+정상 출력 예시:
+[{gpu 0 [[gpu]] []}]
+
+비어 있으면 GPU가 컨테이너에 전달되지 않은 상태입니다.
+
+---
+
+## 문제 원인
+
+Docker는 기본적으로 GPU를 인식하지 못합니다.
+따라서 NVIDIA Container Toolkit 설치가 필수입니다.
+
+---
+
+## NVIDIA Container Toolkit 설치 절차
+
+아래 순서를 그대로 실행해야 합니다.
+
+1. NVIDIA GPG 키 등록
+
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+| sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+2. NVIDIA 저장소 추가
+
+curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+| sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+| sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+3. 패키지 목록 갱신
+
+sudo apt-get update
+
+4. NVIDIA Container Toolkit 설치
+
+sudo apt-get install -y nvidia-container-toolkit
+
+5. Docker 런타임 설정 (중요)
+
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+※ Docker 재시작을 하지 않으면 100% 실패합니다.
+
+---
+
+## 설치 확인
+
+docker info | grep -i nvidia
+
+정상 출력:
+Runtimes: nvidia runc
+
+---
+
+## GPU 테스트
+
+docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi
+
+---
+
+## Ollama 컨테이너 재시작
+
+docker compose down -v
+docker compose up -d --build
+
+---
+
+## 최종 확인
+
+docker inspect ollama --format='{{.HostConfig.DeviceRequests}}'
+
+정상 출력이 나오면 GPU 설정 완료입니다.

@@ -57,6 +57,38 @@ def find_sentences_with_keywords(text, keywords):
 
 keywords = ["모집", "자격", "우대"]
 
+def extract_language_text(text: str) -> str:
+    """
+    크롤링된 텍스트에서
+    - 한글, 영어만 유지
+    - 특수문자 제거
+    - 공백 정리
+    """
+    # 1. 한글, 영어, 공백만 남기기
+    cleaned = re.sub(r"[^가-힣a-zA-Z\s]", " ", text)
+
+    # 2. 연속 공백 제거
+    cleaned = re.sub(r"\s+", " ", cleaned)
+
+    return cleaned.strip()
+
+def extract_job_text(job: dict) -> str:
+    fields = [
+        job.get("title", ""),
+        job.get("company", ""),
+        " ".join(job.get("job_category", [])),
+        job.get("content", "")
+    ]
+
+    text = " ".join(fields)
+
+    cleaned = re.sub(r"[^가-힣a-zA-Z\s]", " ", text)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+
+    return cleaned.strip()
+
+
+
 @router.post("/jobfit")
 async def jobfit(
     job: str = Form(...),
@@ -86,9 +118,8 @@ async def jobfit(
         print("crawl: EMPTY or None")
     else:
         print(f"crawl: {job_text}")
-    
-    
-    
+        job_text = extract_job_text(job_text)
+        print(f"crawl2: {job_text}")   
     
 
     # 2️⃣ AI 프롬프트 생성
@@ -98,6 +129,10 @@ async def jobfit(
 
 [직무]
 {job}
+
+[취업공고]
+{job_text}
+여기에 지원할꺼야!!
 
 [자기소개서]
 {pdftext}
