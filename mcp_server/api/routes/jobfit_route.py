@@ -99,6 +99,10 @@ async def jobfit(
 [직무]
 {job}
 
+[취업공고]
+{job_text}
+여기에 지원할꺼야!!
+
 [자기소개서]
 {pdftext}
 
