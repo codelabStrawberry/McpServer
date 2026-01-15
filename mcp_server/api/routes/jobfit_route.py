@@ -72,6 +72,22 @@ def extract_language_text(text: str) -> str:
 
     return cleaned.strip()
 
+def extract_job_text(job: dict) -> str:
+    fields = [
+        job.get("title", ""),
+        job.get("company", ""),
+        " ".join(job.get("job_category", [])),
+        job.get("content", "")
+    ]
+
+    text = " ".join(fields)
+
+    cleaned = re.sub(r"[^가-힣a-zA-Z\s]", " ", text)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+
+    return cleaned.strip()
+
+
 
 @router.post("/jobfit")
 async def jobfit(
@@ -102,7 +118,7 @@ async def jobfit(
         print("crawl: EMPTY or None")
     else:
         print(f"crawl: {job_text}")
-        job_text = extract_language_text(job_text)
+        job_text = extract_job_text(job_text)
         print(f"crawl2: {job_text}")   
     
 
