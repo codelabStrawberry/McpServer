@@ -12,3 +12,8 @@ pillow
 html2text
 
 aiomysql
+transformers[torch]
+sentence-transformers
+torch
+pypdf
+langchain-text-splitters
