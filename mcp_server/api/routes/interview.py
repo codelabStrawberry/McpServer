@@ -44,15 +44,15 @@ async def make_questions(
   job_name: str | None = Form(None),
   url: HttpUrl = Form(...),
   file: UploadFile = File(...),
-  n_questions: int = Form(6),
+  n_questions: int = Form(4),
 ):
   # 1) 유효성 체크
   if not jc_code:
       raise HTTPException(status_code=400, detail="jc_code가 필요합니다.")
   if file.content_type != "application/pdf":
       raise HTTPException(status_code=400, detail="PDF만 업로드 가능합니다.")
-  if n_questions < 3 or n_questions > 15:
-      raise HTTPException(status_code=400, detail="n_questions는 3~15 사이여야 합니다.")
+  if n_questions < 4 or n_questions > 15:
+      raise HTTPException(status_code=400, detail="n_questions는 4~15 사이여야 합니다.")
     
   # 1) PDF bytes 읽기
   pdf_bytes = await file.read()
@@ -74,7 +74,7 @@ async def make_questions(
   try:
       jd_text = await asyncio.wait_for(
         run_in_threadpool(crawl_url, str(url)),
-        timeout=20,
+        timeout=120,
       )
   except Exception:
       jd_text = "채용공고 크롤링에 실패했습니다."
@@ -85,16 +85,14 @@ async def make_questions(
   prompt = f"""
 너는 채용 면접관이다. 사용자의 입력(직무/채용공고/자기소개서)을 분석해 "면접 예상 질문"만 생성한다.
 절대 요약하지 마라. 절대 해설/답변/머리말/부연설명/카테고리 제목을 쓰지 마라.
-반드시 "질문" 문장(물음표 ? 로 끝나는 문장)만 출력하라.
+반드시 물음표 "?" 로 끝나는 문장만 출력하라.
 
 출력 규칙(중요):
 - 질문은 총 {n_questions}개
 - 한 줄에 질문 1개
-- 질문만 출력(해설/머리말/추가 설명 금지)
-- 채용공고 요구역량/자기소개서 경험에 근거해 꼬리질문 포함
+- 해설/머리말/추가 설명 금지
 - 리스트 형태로 출력해줘.
-- 첫번째 질문은 제외하고 출력해줘
-- 반드시 "질문" 문장(물음표 ? 로 끝나는 문장)만 출력해줘
+- 반드시 물음표 "?" 로 끝나는 문장만 출력해줘
 
 [직무]
 {job_label}
@@ -112,18 +110,24 @@ async def make_questions(
   except Exception:
     raise HTTPException(status_code=504, detail="LLM 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.")
   
+  raw = ""
   model = ""
   if isinstance(result, dict):
-    raw = result.get("answer", "") or result.get("content", "") or ""
-    model = result.get("model")
-  
+    model = result.get("model", "") or ""
+    raw = (
+      result.get("answer", "") 
+      or result.get("content") 
+      or (result.get("message", {}) or {}).get("content")
+      or result.get("response")
+      or ""
+      )
   else:
-    raw = str(result)
+      raw = str(result)
+  raw = (raw or "").strip()
 
     
   questions = _parse_questions(raw, limit=n_questions)
   print("parsed questions:", questions)
-  questions = questions[1:]
   if not questions:
     questions = ["지원 동기와 해당 직무에서 본인의 강점을 설명해 주세요."]
     
@@ -136,60 +140,67 @@ async def make_questions(
       "raw": raw,
     }
 
-class InterviewAnswerRequest(BaseModel):
+class InterviewFeedbackRequest(BaseModel):
   jc_code: str
   job_name: Optional[str] = None
   url: HttpUrl
   resume_text: str
   jd_text: Optional[str] = None
+  question: str
+  user_answer: str
   
-  # 프론트가 둘 중 아무거나 보내도 되게
-  question: Optional[str] = None
-  questions: Optional[list[str]] = None
+@router.post("/feedback")
+async def make_feedback(req: InterviewFeedbackRequest):
+  # 1) validate
+  if not req.jc_code:
+    raise HTTPException(status_code=400, detail="jc_code가 필요합니다.")
   
-@router.post("/answer")
-async def make_answer(req:InterviewAnswerRequest):
-    # 1) validate
-    if not req.jc_code:
-      raise HTTPException(status_code=400, detail="jc_code가 필요합니다.")
+  resume_text = (req.resume_text or "").strip()
+  if len(resume_text) < 200:
+    raise HTTPException(status_code=400, detail="resume_text는 최소 200자 이상이어야 합니다.")
+  if len(resume_text) > 8000:
+    resume_text = resume_text[:8000]
     
-    resume_text = (req.resume_text or "").strip()
-    if len(resume_text) < 200:
-      raise HTTPException(status_code=400, detail="resume_text는 최소 200자 이상이어야 합니다.")
-    if len(resume_text) > 8000:
-      resume_text = resume_text[:8000]
-      
-    # 질문 1개 선택
-    q = (req.question or "").strip()
-    if not q and req.questions and len(req.questions) > 0:
-        q = (req.questions[0] or "").strip()
-        
-    if not q:
-        raise HTTPException(status_code=400, detail="question(또는 questions[0])이 필요합니다.")
-      
-    # 2) jd_text 확보 (프론트가 보내면 그걸 우선 사용)
-    jd_text = (req.jd_text or "").strip()
-    if not jd_text:
-        try:
-          jd_text = await asyncio.wait_for(
-            run_in_threadpool(crawl_url, str(req.url)),
-            timeout=20,
-          )
-        except Exception:
-          jd_text = ""
-          
-    job_label = req.job_name or req.jc_code
+  q = (req.question or "").strip()
+  if not q:
+    raise HTTPException(status_code=400, detail="question이 필요합니다.")
+  
+  user_answer = (req.user_answer or "").strip()
+  if len(user_answer) < 20:
+    raise HTTPException(status_code=400, detail="user_answer는 최소 20자 이상이어야 합니다.")
+  if len(user_answer) > 2000:
+    user_answer = user_answer[:2000]
     
-    # 3) prompt (답변만 출력하도록 강하게)
-    prompt = f"""
-너는 면접 코치다. 아래 입력을 바탕으로 "지원자 입장에서의 모범 답변"만 작성해라.
-형식/규칙:
-- 한국어로 작성
-- 60~90초 분량(대략 8~12문장)
-- STAR 구조(상황-과제-행동-결과)가 자연스럽게 드러나게
-- 채용공고의 요구역량 키워드를 2~3개 녹여서
-- 자기소개서/채용공고에 없는 사실은 지어내지 말 것(없으면 일반화해서 표현)
-- 머리말/제목/목차/해설 없이 "답변 본문만" 출력
+  # 2) jd text 확보 (프론트가 보내면 우선 사용)
+  jd_text = (req.jd_text or "").strip()
+  if not jd_text:
+    try:
+      jd_text = await asyncio.wait_for(
+        run_in_threadpool(crawl_url, str(req.url)),
+        timeout=120,
+      )
+    except Exception:
+      jd_text = ""
+      
+  job_label = req.job_name or req.jc_code
+      
+# 3) prompt (피드백만, 구조화)
+  prompt = f"""
+너는 면접 코치다. 아래 입력을 바탕으로 "지원자의 답변 피드백"을 한국어로 작성해라.
+절대 면접관 역할극을 하지 말고, 평가/개선 중심으로 코칭하라.
+
+출력 형식(중요): 아래 섹션 제목을 그대로 사용해서 작성
+1) 한줄총평: (1문장)
+2) 잘한점: (불릿 3개)
+3) 아쉬운점: (불릿 3개)
+4) JD매칭: (채용공고 키워드/역량 관점에서 빠진 요소 2~3개)
+5) STAR보완: (S/T/A/R 각각 1~2문장으로 보완 제안)
+6) 개선된 답변 예시: (사용자 답변을 기반으로 60~90초 분량, 8~12문장, 사실을 지어내지 말 것)
+
+규칙:
+- 자기소개서/채용공고에 없는 사실은 만들어내지 말 것 (없으면 일반화해서 표현)
+- 군더더기 인사말/머리말/면접질문 재진술 금지
+- 위 섹션 외의 내용 추가 금지
 
 [직무]
 {job_label}
@@ -202,27 +213,33 @@ async def make_answer(req:InterviewAnswerRequest):
 
 [면접 질문]
 {q}
+
+[사용자 답변]
+{user_answer}
 """.strip()
 
-    try:
-        result = await asyncio.wait_for(_call_ollama(prompt), timeout=120)
-    except Exception:
-        raise HTTPException(status_code=504, detail="LLM 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.")
-      
-    model = ""
-    if isinstance(result, dict):
-      answer = result.get("answer", "") or result.get("content", "") or ""
+  try:
+    result = await asyncio.wait_for(_call_ollama(prompt), timeout=120)
+  except Exception:
+      raise HTTPException(status_code=504, detail="LLM 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.")
+    
+  model = ""
+  if isinstance(result, dict):
+      feedback = result.get("answer", "") or result.get("content", "") or ""
       model = result.get("model") or ""
-    else:
-      answer = str(result)
+  else:
+      feedback = str(result)
       
-    answer = (answer or "").strip()
-    if not answer:
-        raise HTTPException(status_code=500, detail="빈 답변이 반환되었습니다.")
-      
-    return {
-        "success": True,
-        "answer": answer,
-        "model": model,
-        "question": q,
+  feedback = (feedback or "").strip()
+  if not feedback:
+      raise HTTPException(status_code=500, detail="빈 피드백이 반환되었습니다.")
+    
+  return {
+      "success": True,
+      "feedback": feedback,
+      "model": model,
+      "question": q,
     }
+      
+    
+    
