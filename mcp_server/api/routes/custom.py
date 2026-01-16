@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any, Dict, List, Optional
 
+import aiomysql
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from starlette.concurrency import run_in_threadpool
 
@@ -13,6 +15,237 @@ from api.services.summarize import summarize_text
 from ollama import ollama_chat
 
 router = APIRouter(prefix="/ai/custom", tags=["custom"])
+
+_pool: Optional[aiomysql.Pool] = None
+
+
+def _env_any(*names: str, default: Optional[str] = None, required: bool = True) -> str:
+    """
+    여러 환경변수 후보 중 먼저 설정된 값을 반환한다.
+    예) _env_any("MYSQL_HOST", "DB_HOST")
+    """
+    for name in names:
+        v = os.getenv(name)
+        if v is not None and str(v).strip() != "":
+            return v
+
+    if default is not None:
+        return default
+
+    if required:
+        raise RuntimeError(f"환경변수 {', '.join(names)} 중 하나가 설정되어 있지 않습니다.")
+
+    return ""
+
+
+async def _get_pool() -> aiomysql.Pool:
+    global _pool
+    if _pool is not None:
+        return _pool
+
+
+    host = _env_any("MYSQL_HOST", "DB_HOST")
+    port = int(_env_any("MYSQL_PORT", "DB_PORT", default="3307"))
+    user = _env_any("MYSQL_USER", "DB_USER")
+    password = _env_any("MYSQL_PASSWORD", "DB_PASSWORD", default="", required=False)
+    db = _env_any("MYSQL_DB", "DB_NAME")
+
+    _pool = await aiomysql.create_pool(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        db=db,
+        charset="utf8mb4",
+        autocommit=True,
+        minsize=1,
+        maxsize=int(os.getenv("DB_POOL_MAX", "10")),
+        cursorclass=aiomysql.DictCursor,
+    )
+    return _pool
+
+
+@router.on_event("shutdown")
+async def _shutdown_pool():
+    global _pool
+    if _pool is None:
+        return
+    _pool.close()
+    await _pool.wait_closed()
+    _pool = None
+
+
+async def _table_exists(conn: aiomysql.Connection, table: str) -> bool:
+    async with conn.cursor() as cur:
+        await cur.execute("SHOW TABLES LIKE %s", (table,))
+        row = await cur.fetchone()
+        return row is not None
+
+
+async def _resolve_recruit_table(conn: aiomysql.Connection) -> str:
+    if await _table_exists(conn, "job_trend"):
+        return "job_trend"
+    if await _table_exists(conn, "job_recruit"):
+        return "job_recruit"
+    raise RuntimeError("공고 테이블(job_trend 또는 job_recruit)을 찾을 수 없습니다.")
+
+
+async def _get_columns(conn: aiomysql.Connection, table: str) -> List[str]:
+    async with conn.cursor() as cur:
+        await cur.execute(f"SHOW COLUMNS FROM `{table}`")
+        rows = await cur.fetchall()
+    return [r["Field"] for r in rows]
+
+
+def _pick_col(cols: set[str], candidates: List[str]) -> Optional[str]:
+    for c in candidates:
+        if c in cols:
+            return c
+    return None
+
+
+def _normalize_term_list(terms: List[str]) -> List[str]:
+    out: List[str] = []
+    for t in terms:
+        t = (t or "").strip()
+        if not t:
+            continue
+        t = re.sub(r"\s+", " ", t)
+        out.append(t)
+
+    uniq: List[str] = []
+    seen = set()
+    for t in out:
+        k = t.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        uniq.append(t)
+    return uniq
+
+
+async def _fetch_candidates_from_db(
+    *,
+    job_cat: str,
+    job_tech: List[str],
+    job_keyword: List[str],
+    limit: int = 200,
+) -> List[Dict[str, Any]]:
+    """
+    job_trend/job_recruit에서 후보 공고 조회.
+    반환 dict는 통일 키를 최대한 제공:
+      id, recruit_id, job_cat, job_title, job_company, jobiwg_url, job_keyword, job_tech
+    """
+    job_tech = _normalize_term_list(job_tech)
+    job_keyword = _normalize_term_list(job_keyword)
+
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        table = await _resolve_recruit_table(conn)
+        cols_list = await _get_columns(conn, table)
+        cols = set(cols_list)
+
+        id_col = _pick_col(cols, ["id", "recruit_id", "job_id"])
+        cat_col = _pick_col(cols, ["job_big", "job_cat", "job_category", "jc_name", "name"])
+        title_col = _pick_col(cols, ["job_title", "title"])
+        company_col = _pick_col(cols, ["job_company", "company"])
+        url_col = _pick_col(cols, ["job_url", "url", "link"])
+        keyword_col = _pick_col(cols, ["job_keyword", "keyword"])
+        tech_col = _pick_col(cols, ["job_tech", "tech", "skills", "stack"])
+
+        if not any([title_col, company_col, url_col]):
+            raise RuntimeError(
+                f"{table} 테이블에서 공고 기본 컬럼(title/company/url)을 찾지 못했습니다. 현재 컬럼={cols_list}"
+            )
+
+ 
+        select_parts = []
+        if id_col:
+            select_parts.append(f"`{id_col}` AS `id`")
+            select_parts.append(f"`{id_col}` AS `recruit_id`")
+        else:
+            select_parts.append("NULL AS `id`")
+            select_parts.append("NULL AS `recruit_id`")
+
+        select_parts.append(f"`{cat_col}` AS `job_cat`" if cat_col else "NULL AS `job_cat`")
+        select_parts.append(f"`{title_col}` AS `job_title`" if title_col else "'' AS `job_title`")
+        select_parts.append(f"`{company_col}` AS `job_company`" if company_col else "'' AS `job_company`")
+        select_parts.append(f"`{url_col}` AS `job_url`" if url_col else "'' AS `job_url`")
+        select_parts.append(f"`{keyword_col}` AS `job_keyword`" if keyword_col else "'' AS `job_keyword`")
+        select_parts.append(f"`{tech_col}` AS `job_tech`" if tech_col else "'' AS `job_tech`")
+
+        select_sql = ", ".join(select_parts)
+
+        # 검색
+        blob_cols = []
+        for c in [title_col, company_col, keyword_col, tech_col]:
+            if c:
+                blob_cols.append(f"COALESCE(`{c}`, '')")
+        blob_expr = "LOWER(CONCAT_WS(' ', " + ", ".join(blob_cols) + "))" if blob_cols else "''"
+
+        where = ["1=1"]
+        params: List[Any] = []
+
+        # 카테고리
+        if cat_col and job_cat:
+            where.append(f"`{cat_col}` = %s")
+            params.append(job_cat)
+
+
+        term_like = []
+        term_params: List[Any] = []
+        for t in job_tech:
+            term_like.append(f"{blob_expr} LIKE %s")
+            term_params.append(f"%{t.lower()}%")
+        for k in job_keyword:
+            term_like.append(f"{blob_expr} LIKE %s")
+            term_params.append(f"%{k.lower()}%")
+
+        use_term_filter = len(term_like) > 0
+
+        # tech 2점, keyword 1점
+        score_terms = []
+        score_params: List[Any] = []
+        for t in job_tech:
+            score_terms.append(f"(CASE WHEN {blob_expr} LIKE %s THEN 2 ELSE 0 END)")
+            score_params.append(f"%{t.lower()}%")
+        for k in job_keyword:
+            score_terms.append(f"(CASE WHEN {blob_expr} LIKE %s THEN 1 ELSE 0 END)")
+            score_params.append(f"%{k.lower()}%")
+        score_expr = " + ".join(score_terms) if score_terms else "0"
+
+        order_by = f"ORDER BY ({score_expr}) DESC"
+        if id_col:
+            order_by += f", `{id_col}` DESC"
+
+        base_sql = f"SELECT {select_sql} FROM `{table}` WHERE " + " AND ".join(where)
+
+        async def _run(sql: str, p: List[Any]) -> List[Dict[str, Any]]:
+            async with conn.cursor() as cur:
+                await cur.execute(sql + f" {order_by} LIMIT %s", tuple(p + score_params + [int(limit)]))
+                return await cur.fetchall()
+
+        if use_term_filter:
+            sql = base_sql + " AND (" + " OR ".join(term_like) + ")"
+            rows = await _run(sql, params + term_params)
+            if len(rows) < min(50, limit // 2):
+                rows = await _run(base_sql, params)
+        else:
+            rows = await _run(base_sql, params)
+
+        out = []
+        for r in rows:
+            out.append(
+                {
+                    **r,
+                    "job_title": r.get("job_title") or "",
+                    "job_company": r.get("job_company") or "",
+                    "job_url": r.get("job_url") or "",
+                    "job_keyword": r.get("job_keyword") or "",
+                    "job_tech": r.get("job_tech") or "",
+                }
+            )
+        return out
 
 
 def _split_csv(raw: str) -> List[str]:
@@ -44,9 +277,6 @@ def _fallback_rank(
     LLM 결과가 JSON 파싱 실패할 때를 대비한 룰 기반 fallback.
     - 공고의 title/company/keyword/tech 텍스트에 사용자 tech/keyword가 포함되는지로 점수 부여
     """
-    tech_l = [t.lower() for t in job_tech]
-    kw_l = [k.lower() for k in job_keyword]
-
     ranked = []
     for j in jobs:
         title = str(j.get("job_title") or j.get("title") or "")
@@ -89,11 +319,9 @@ async def _llm_match_jobs(
     """
     후보 공고(candidates)를 LLM이 top_k로 재정렬 + 근거 반환
     """
-    # LLM에 넘길 후보는 너무 크면 느려지므로 상한을 둡니다.
     MAX_CANDIDATES_FOR_LLM = 30
     short_candidates = candidates[:MAX_CANDIDATES_FOR_LLM]
 
-    # 후보 공고를 최소 필드만 남겨 LLM 입력을 절약
     llm_jobs = []
     for j in short_candidates:
         llm_jobs.append(
@@ -155,81 +383,84 @@ async def match_jobs(
     job_cat: str = Form(...),
     job_tech: str = Form(""),
     job_keyword: str = Form(""),
-    # 프론트(또는 Node)가 미리 뽑아준 후보 공고 리스트(JSON 문자열)
-    candidates_json: str = Form("[]"),
     top_k: int = Form(8),
     debug: bool = Form(False),
+    candidates_limit: int = Form(200),
 ):
     """
-    PDF(이력서) + 사용자 선택값(job_cat/job_tech/job_keyword) + 후보 공고 리스트를 받아
-    Top-K 공고 매칭 결과를 반환한다.
+    PDF(이력서) + 사용자 선택값(job_cat/job_tech/job_keyword)을 받아,
+    DB(job_trend/job_recruit)에서 후보 공고를 조회하고 Top-K 공고 매칭 결과를 반환한다.
     """
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="PDF만 업로드 가능합니다.")
 
-    # 1) 후보 공고 파싱
-    try:
-        candidates = json.loads(candidates_json or "[]")
-        if not isinstance(candidates, list):
-            raise ValueError("candidates_json must be a list")
-    except Exception:
-        raise HTTPException(status_code=400, detail="candidates_json이 올바른 JSON 배열이 아닙니다.")
-
-    if not candidates:
-        raise HTTPException(status_code=422, detail="후보 공고(candidates)가 비어 있습니다. 먼저 공고를 조회해서 넘겨주세요.")
-
-    # 2) 사용자 입력 파싱
+    # 1) 사용자 입력 파싱
     job_tech_list = _split_csv(job_tech)
     job_keyword_list = _split_csv(job_keyword)
+
+    # 2) 공고 조회
+    try:
+        candidates = await _fetch_candidates_from_db(
+            job_cat=job_cat,
+            job_tech=job_tech_list,
+            job_keyword=job_keyword_list,
+            limit=max(50, min(int(candidates_limit), 1000)),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB에서 공고 후보 조회 실패: {e}")
+
+    if not candidates:
+        raise HTTPException(
+            status_code=422,
+            detail="DB에서 후보 공고를 찾지 못했습니다. (카테고리/키워드 조건 또는 job_trend 데이터/컬럼 확인 필요)",
+        )
 
     # 3) PDF bytes 읽기
     pdf_bytes = await file.read()
     if not pdf_bytes:
         raise HTTPException(status_code=400, detail="업로드된 PDF가 비어 있습니다.")
 
-    # 4) extract -> summarize (chat.py 패턴 참고: run_in_threadpool + summarize_text) :contentReference[oaicite:5]{index=5}
+    # 4) extract -> summarize
     resume_text = await run_in_threadpool(extract_pdf_text, pdf_bytes, summarize=False)
     if not resume_text or "추출하지 못했습니다" in resume_text:
         raise HTTPException(status_code=422, detail="PDF에서 텍스트를 추출하지 못했습니다.")
 
     resume_summary = await summarize_text(resume_text, language="ko", style="structured")
 
-    # 5) LLM 매칭(Top-K)
+    # 5) LLM 매칭
+    k = max(1, min(int(top_k), 20))
     llm_out = await _llm_match_jobs(
         resume_summary=resume_summary,
         job_cat=job_cat,
         job_tech=job_tech_list,
         job_keyword=job_keyword_list,
         candidates=candidates,
-        top_k=max(1, min(int(top_k), 20)),
+        top_k=k,
     )
 
-    # 6) LLM 파싱 실패 시 fallback 랭킹 제공
+    # 6) LLM 파싱 실패 >> fallback
     if llm_out.get("_parse_failed"):
-        ranked = _fallback_rank(
-            candidates,
-            job_tech=job_tech_list,
-            job_keyword=job_keyword_list,
-        )
-        top = ranked[: max(1, min(int(top_k), 20))]
-        resp = {"matches": top, "mode": "fallback_rule_based"}
+        ranked = _fallback_rank(candidates, job_tech=job_tech_list, job_keyword=job_keyword_list)
+        resp = {"matches": ranked[:k], "mode": "fallback_rule_based"}
         if debug:
             resp["debug"] = {
                 "raw_llm": llm_out.get("raw"),
                 "resume_summary": resume_summary,
+                "candidates_count": len(candidates),
             }
         return resp
 
-    # LLM이 준 top을 원본 candidates와 조인해서 필요한 메타데이터 보강
-    id_to_job = {}
+    id_to_job: Dict[str, Dict[str, Any]] = {}
     for j in candidates:
         jid = j.get("id") or j.get("job_id") or j.get("recruit_id")
+        if jid is None:
+            continue
         id_to_job[str(jid)] = j
 
     enriched = []
     for item in llm_out.get("top", []):
         jid = item.get("job_id")
-        base = id_to_job.get(str(jid), {})
+        base = id_to_job.get(str(jid), {}) if jid is not None else {}
         enriched.append(
             {
                 **base,
@@ -240,7 +471,7 @@ async def match_jobs(
             }
         )
 
-    resp = {"matches": enriched[: max(1, min(int(top_k), 20))], "mode": "llm_rerank"}
+    resp = {"matches": enriched[:k], "mode": "llm_rerank"}
     if debug:
-        resp["debug"] = {"resume_summary": resume_summary}
+        resp["debug"] = {"resume_summary": resume_summary, "candidates_count": len(candidates)}
     return resp
