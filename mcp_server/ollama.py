@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from ollama_client import get_client
 
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "gemma3:1b")
+CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "gemma3:4b")
 EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 
 
@@ -89,3 +89,7 @@ async def ollama_chat(prompt: str):
             "eval_duration": data.get("eval_duration"),
         },
     }
+
+def ollama_embed_sync(text: str) -> list[float]:
+    """동기 버전 ollama_embed"""
+    return asyncio.run(ollama_embed(text))

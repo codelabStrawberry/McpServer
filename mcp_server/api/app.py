@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from ollama_client import create_client, close_client
 from ingest import ingest_docs
-from api.routes import chat, rag, docs, jobfit_route, resume_analyze, interview
+from api.routes import chat, jobfit_route, resume_analyze, interview
 from api.db.redis import get_redis_client  # 새 모듈 임포트
 
 load_dotenv()
@@ -60,7 +60,7 @@ app.add_middleware(
 
 app.include_router(chat.router, prefix="/chat")
 app.include_router(jobfit_route.router, prefix="")
-app.include_router(rag.router, prefix="/mcp/tools")
-app.include_router(docs.router, prefix="/mcp/tools")
+# app.include_router(rag.router, prefix="/mcp/tools")
+# app.include_router(docs.router, prefix="/mcp/tools")
 app.include_router(resume_analyze.router, prefix="/resume")
 app.include_router(interview.router, prefix="/interview")
