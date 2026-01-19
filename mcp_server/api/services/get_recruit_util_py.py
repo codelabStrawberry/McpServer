@@ -32,51 +32,51 @@ HEADERS = {
 OCR_SEMAPHORE = asyncio.Semaphore(8)
 
 
-async def perform_qwen3vl_ocr(img_url, client):
-    async with OCR_SEMAPHORE:
-        try:
-            # 이미지 비동기 다운로드
-            img_res = await client.get(img_url, timeout=5)
-            img_res.raise_for_status()
+# async def perform_qwen3vl_ocr(img_url, client):
+#     async with OCR_SEMAPHORE:
+#         try:
+#             # 이미지 비동기 다운로드
+#             img_res = await client.get(img_url, timeout=5)
+#             img_res.raise_for_status()
 
-            # 이미지 처리(gif, 투명 등 처리)
-            def process_img(content):
-                img = Image.open(BytesIO(content))
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                buffer = BytesIO()
-                img.save(buffer, format='PNG')
-                return base64.b64encode(buffer.getvalue()).decode('utf-8')
+#             # 이미지 처리(gif, 투명 등 처리)
+#             def process_img(content):
+#                 img = Image.open(BytesIO(content))
+#                 if img.mode != 'RGB':
+#                     img = img.convert('RGB')
+#                 buffer = BytesIO()
+#                 img.save(buffer, format='PNG')
+#                 return base64.b64encode(buffer.getvalue()).decode('utf-8')
 
-            img_base64 = await asyncio.to_thread(process_img, img_res.content)
+#             img_base64 = await asyncio.to_thread(process_img, img_res.content)
 
-            prompt = """
-            이 이미지는 어느 특정 회사의 채용 공고의 일부입니다.
-            이미지 내의 작성된 모든 내용을 마크다운 형식으로 추출해주세요.
-            만약 표가 있다면 반드시 마크다운 표 형식을 유지해주세요.
-            만약 이미지 내에 텍스트나 표 등이 없다면 '내용이 없습니다.'로 응답해주세요.
-            """
+#             prompt = """
+#             이 이미지는 어느 특정 회사의 채용 공고의 일부입니다.
+#             이미지 내의 작성된 모든 내용을 마크다운 형식으로 추출해주세요.
+#             만약 표가 있다면 반드시 마크다운 표 형식을 유지해주세요.
+#             만약 이미지 내에 텍스트나 표 등이 없다면 '내용이 없습니다.'로 응답해주세요.
+#             """
             
-            payload = {
-                "model": CRAWL_MODEL,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt,
-                        "images": [img_base64]  # base64 string (data: 제거된 상태)
-                    }
-                ]
-            }
-            ollam_client = get_client()
-            ollama_res = await ollam_client.post(f"{OLLAMA_URL}/api/chat", json=payload)
+#             payload = {
+#                 "model": CRAWL_MODEL,
+#                 "messages": [
+#                     {
+#                         "role": "user",
+#                         "content": prompt,
+#                         "images": [img_base64]  # base64 string (data: 제거된 상태)
+#                     }
+#                 ]
+#             }
+#             ollam_client = get_client()
+#             ollama_res = await ollam_client.post(f"{OLLAMA_URL}/api/chat", json=payload)
 
-            extracted_text = ollama_res['message']['content']
-            print(f"extracted_text :  {extracted_text}")
-            return f"\n\n> **[VLM 추출 시작]**\n{extracted_text}\n> **[VLM 추출 종료]**\n\n"
+#             extracted_text = ollama_res['message']['content']
+#             print(f"extracted_text :  {extracted_text}")
+#             return f"\n\n> **[VLM 추출 시작]**\n{extracted_text}\n> **[VLM 추출 종료]**\n\n"
 
-        except Exception as e:
-            print(f"OCR failed ({img_url}): {e}")
-            return ""
+#         except Exception as e:
+#             print(f"OCR failed ({img_url}): {e}")
+#             return ""
 
 
 def get_info_from_metadata(html_content):
@@ -93,14 +93,14 @@ def get_info_from_metadata(html_content):
         return "N/A", "N/A"
 
 
-def format_url(src):
-    if src.startswith('//'):
-        full_img_url = "https:" + src
-    elif src.startswith('/'):
-        full_img_url = "https://www.saramin.co.kr" + src
-    else:
-        full_img_url = src
-    return full_img_url
+# def format_url(src):
+#     if src.startswith('//'):
+#         full_img_url = "https:" + src
+#     elif src.startswith('/'):
+#         full_img_url = "https://www.saramin.co.kr" + src
+#     else:
+#         full_img_url = src
+#     return full_img_url
 
 
 async def fetch_recruit(code, cat_nm, title, company, semaphore, client):
@@ -181,31 +181,31 @@ async def extract_jd_markdown(jd_url, client):
         if not body:
             return ""
 
-        img_tags = body.find_all('img')
+        # img_tags = body.find_all('img')
 
         # ocr 작업 병렬 실행
-        ocr_tasks = []
-        valid_imgs = []
+        # ocr_tasks = []
+        # valid_imgs = []
 
-        for img in img_tags:
-            src = img.get('src')
-            if src and not any(k in src.lower() for k in ['icon', 'logo', 'blank', 'pixel', 'watermark']):
-                full_img_url = format_url(src)
-                valid_imgs.append(img)
-                ocr_tasks.append(perform_qwen3vl_ocr(full_img_url, client))
-            else:
-                img.decompose()
+        # for img in img_tags:
+        #     src = img.get('src')
+        #     if src and not any(k in src.lower() for k in ['icon', 'logo', 'blank', 'pixel', 'watermark']):
+        #         full_img_url = format_url(src)
+        #         valid_imgs.append(img)
+        #         ocr_tasks.append(perform_qwen3vl_ocr(full_img_url, client))
+        #     else:
+        #         img.decompose()
 
-        # ocr 작업 실행 후 결과 대기
-        print(f"총 {len(ocr_tasks)}개의 이미지 병렬 처리 시작...")
-        ocr_results = await asyncio.gather(*ocr_tasks)
+        # # ocr 작업 실행 후 결과 대기
+        # print(f"총 {len(ocr_tasks)}개의 이미지 병렬 처리 시작...")
+        # ocr_results = await asyncio.gather(*ocr_tasks)
 
-        # 이미지 태그를 추출된 텍스트로 교체
-        for img, ocr_text in zip(valid_imgs, ocr_results):
-            if ocr_text:
-                img.replace_with(soup.new_string(ocr_text))
-            else:
-                img.decompose()
+        # # 이미지 태그를 추출된 텍스트로 교체
+        # for img, ocr_text in zip(valid_imgs, ocr_results):
+        #     if ocr_text:
+        #         img.replace_with(soup.new_string(ocr_text))
+        #     else:
+        #         img.decompose()
 
         # 마크다운 형태로 변환
         h = html2text.HTML2Text()

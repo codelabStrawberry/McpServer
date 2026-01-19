@@ -5,10 +5,11 @@ from starlette.concurrency import run_in_threadpool
 from pydantic import HttpUrl
 
 from api.services.extract import extract_pdf_text
-from api.services.crawl import crawl_url
+# from api.services.crawl import crawl_url
 from ollama import ollama_chat
 from pydantic import BaseModel
 from typing import Optional
+from api.services.get_single_recruit import get_single_recruit
 
 router = APIRouter()
 
@@ -21,10 +22,18 @@ def _parse_questions(raw: str, limit: int = 5) -> list[str]:
   for l in lines:
         l = re.sub(r"^\s*[-•]\s*", "", l)          # bullet 제거
         l = re.sub(r"^\s*\d+\s*[.)]\s*", "", l)    # 1. / 1) 제거
-        if len(l) >= 6:
-            out.append(l)
+        l = re.sub(r"^\s*Q\d+\s*[:.)]\s*", "", l, flags=re.I)
+        
+        if not l.endswith("?"):
+          continue
+        
+        if len(l) < 6 or len(l) > 120:
+          continue
+        
+        out.append(l)
         if len(out) >= limit:
             break
+          
   return out
 
 async def _call_ollama(prompt: str):
@@ -37,6 +46,7 @@ async def _call_ollama(prompt: str):
   if inspect.iscoroutinefunction(ollama_chat):
     return await ollama_chat(prompt)
   return await run_in_threadpool(ollama_chat, prompt)
+
   
 @router.post("/questions")
 async def make_questions(
@@ -71,28 +81,29 @@ async def make_questions(
       resume_text = resume_text[:8000]
   
   # 3) 채용공고 크롤링(타임아웃)
+  jd_text = ""
+
   try:
-      jd_text = await asyncio.wait_for(
-        run_in_threadpool(crawl_url, str(url)),
-        timeout=120,
-      )
+    job_crawl = await asyncio.wait_for(get_single_recruit(str(url)), timeout=120)
+    
+    if not job_crawl or not job_crawl.get("content"):
+      jd_text = "채용공고 크롤링 실패했습니다"
+    else:
+      jd_text = (job_crawl.get("content") or "").strip()
+      print("크롤링된 채용공고 텍스트 길이:", len(jd_text))
+      print("크롤링된 채용공고 텍스트:", jd_text)
+  
+
   except Exception:
-      jd_text = "채용공고 크롤링에 실패했습니다."
+    jd_text = "채용공고 크롤링에 실패했습니다."
       
   job_label = job_name or jc_code
   
   # 3) 프롬포트
   prompt = f"""
-너는 채용 면접관이다. 사용자의 입력(직무/채용공고/자기소개서)을 분석해 "면접 예상 질문"만 생성한다.
-절대 요약하지 마라. 절대 해설/답변/머리말/부연설명/카테고리 제목을 쓰지 마라.
-반드시 물음표 "?" 로 끝나는 문장만 출력하라.
-
-출력 규칙(중요):
-- 질문은 총 {n_questions}개
-- 한 줄에 질문 1개
-- 해설/머리말/추가 설명 금지
-- 리스트 형태로 출력해줘.
-- 반드시 물음표 "?" 로 끝나는 문장만 출력해줘
+당신은 채용 면접관입니다. 사용자가 입력한 자료(직무/채용공고/자기소개서)를 분석해 "면접 예상 질문"만 생성 해주세요.
+절대 단순 요약을 하지 마세요. 절대 해설/답변/머리말/부연설명/카테고리 제목을 쓰지 마세요.
+반드시 물음표 "?" 로 끝나는 문장만 출력하세요.
 
 [직무]
 {job_label}
@@ -102,7 +113,15 @@ async def make_questions(
 
 [자기소개서]
 {resume_text}
+
+출력 규칙(중요):
+- 질문은 총 {n_questions}개
+- 한 줄에 질문 1개
+- 해설/머리말/추가 설명 금지.
+- 리스트 형태로 출력해주세요.
+- 반드시 물음표 "?" 로 끝나는 문장만 출력해주세요.
 """.strip()
+
 
   # 4) Ollama 호출
   try:
@@ -141,26 +160,13 @@ async def make_questions(
     }
 
 class InterviewFeedbackRequest(BaseModel):
-  jc_code: str
-  job_name: Optional[str] = None
-  url: HttpUrl
-  resume_text: str
-  jd_text: Optional[str] = None
   question: str
   user_answer: str
   
 @router.post("/feedback")
 async def make_feedback(req: InterviewFeedbackRequest):
-  # 1) validate
-  if not req.jc_code:
-    raise HTTPException(status_code=400, detail="jc_code가 필요합니다.")
-  
-  resume_text = (req.resume_text or "").strip()
-  if len(resume_text) < 200:
-    raise HTTPException(status_code=400, detail="resume_text는 최소 200자 이상이어야 합니다.")
-  if len(resume_text) > 8000:
-    resume_text = resume_text[:8000]
-    
+  # 1) 예외 처리
+
   q = (req.question or "").strip()
   if not q:
     raise HTTPException(status_code=400, detail="question이 필요합니다.")
@@ -171,51 +177,29 @@ async def make_feedback(req: InterviewFeedbackRequest):
   if len(user_answer) > 2000:
     user_answer = user_answer[:2000]
     
-  # 2) jd text 확보 (프론트가 보내면 우선 사용)
-  jd_text = (req.jd_text or "").strip()
-  if not jd_text:
-    try:
-      jd_text = await asyncio.wait_for(
-        run_in_threadpool(crawl_url, str(req.url)),
-        timeout=120,
-      )
-    except Exception:
-      jd_text = ""
-      
-  job_label = req.job_name or req.jc_code
-      
+
 # 3) prompt (피드백만, 구조화)
   prompt = f"""
 너는 면접 코치다. 아래 입력을 바탕으로 "지원자의 답변 피드백"을 한국어로 작성해라.
 절대 면접관 역할극을 하지 말고, 평가/개선 중심으로 코칭하라.
-
-출력 형식(중요): 아래 섹션 제목을 그대로 사용해서 작성
-1) 한줄총평: (1문장)
-2) 잘한점: (불릿 3개)
-3) 아쉬운점: (불릿 3개)
-4) JD매칭: (채용공고 키워드/역량 관점에서 빠진 요소 2~3개)
-5) STAR보완: (S/T/A/R 각각 1~2문장으로 보완 제안)
-6) 개선된 답변 예시: (사용자 답변을 기반으로 60~90초 분량, 8~12문장, 사실을 지어내지 말 것)
-
-규칙:
-- 자기소개서/채용공고에 없는 사실은 만들어내지 말 것 (없으면 일반화해서 표현)
-- 군더더기 인사말/머리말/면접질문 재진술 금지
-- 위 섹션 외의 내용 추가 금지
-
-[직무]
-{job_label}
-
-[채용공고]
-{jd_text}
-
-[자기소개서]
-{resume_text}
 
 [면접 질문]
 {q}
 
 [사용자 답변]
 {user_answer}
+
+출력 규칙(중요): 아래 섹션 제목을 그대로 사용해서 작성
+1) 한줄총평: (1문장)
+2) 잘한점: (불릿 3개)
+3) 아쉬운점: (불릿 3개)
+4) 개선된 답변 예시: (사용자 답변을 기반으로 3문장, 사실을 지어내지 말 것)
+
+규칙:
+- 자기소개서/채용공고에 없는 사실은 만들어내지 말 것 (없으면 일반화해서 표현)
+- 군더더기 인사말/머리말/면접질문 재진술 금지
+- 위 섹션 외의 내용 추가 금지
+
 """.strip()
 
   try:
