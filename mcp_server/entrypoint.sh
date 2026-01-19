@@ -1,24 +1,29 @@
 #!/bin/sh
+set -e
 
 echo "▶ Waiting for Ollama..."
 until curl -sf "$OLLAMA_BASE_URL/api/tags" > /dev/null; do
   sleep 2
 done
 
-echo "▶ Pull Ollama chat model: $OLLAMA_CHAT_MODEL"
-curl -X POST "$OLLAMA_BASE_URL/api/pull" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"$OLLAMA_CHAT_MODEL\"}" || true
+pull_if_missing () {
+  MODEL="$1"
 
-echo "▶ Pull Ollama embedding model: $OLLAMA_EMBED_MODEL"
-curl -X POST "$OLLAMA_BASE_URL/api/pull" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"$OLLAMA_EMBED_MODEL\"}" || true
+  if curl -sf "$OLLAMA_BASE_URL/api/tags" | grep -q "\"name\":\"$MODEL\""; then
+    echo "✔ Model already exists: $MODEL"
+  else
+    echo "▶ Pulling model: $MODEL"
+    curl -sN "$OLLAMA_BASE_URL/api/pull" \
+      -H "Content-Type: application/json" \
+      -d "{\"name\":\"$MODEL\"}" | while read line; do
+        echo "$line"
+      done
+  fi
+}
 
-echo "▶ Pull Ollama crawl model: $OLLAMA_CRAWL_MODEL"
-curl -X POST "$OLLAMA_BASE_URL/api/pull" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"$OLLAMA_CRAWL_MODEL\"}" || true
+pull_if_missing "$OLLAMA_CHAT_MODEL"
+pull_if_missing "$OLLAMA_EMBED_MODEL"
+pull_if_missing "$OLLAMA_CRAWL_MODEL"
 
 echo "▶ Start MCP Server"
 exec uvicorn main:app --host 0.0.0.0 --port 3333
