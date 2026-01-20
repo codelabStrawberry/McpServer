@@ -57,7 +57,7 @@ echo "✅ CLI wrapper installed at /usr/local/bin/ollama"
 echo
 echo "Usage (host):"
 echo "  ollama list"
-echo "  ollama pull gemma3:1b"
+echo "  ollama pull gemma3:4b"
 echo
 echo "Note:"
 echo "  - Models are stored in the Ollama container volume"
