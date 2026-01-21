@@ -29,7 +29,7 @@ SARAMIN_CATEGORIES = {
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'}
 
-# OCR_SEMAPHORE = asyncio.Semaphore(8)
+OCR_SEMAPHORE = asyncio.Semaphore(8)
 
 
 # async def perform_qwen3vl_ocr(img_url, client):
