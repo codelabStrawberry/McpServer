@@ -473,7 +473,7 @@ docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi
 
 ---
 
-## Ollama 컨테이너 재시작
+## Ollama 컨테이너 재시작 
 
 docker compose down -v
 docker compose up -d --build
