@@ -29,7 +29,7 @@ SARAMIN_CATEGORIES = {
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'}
 
-OCR_SEMAPHORE = asyncio.Semaphore(8)
+# OCR_SEMAPHORE = asyncio.Semaphore(8)
 
 
 # async def perform_qwen3vl_ocr(img_url, client):
@@ -65,12 +65,13 @@ OCR_SEMAPHORE = asyncio.Semaphore(8)
 #                         "content": prompt,
 #                         "images": [img_base64]  # base64 string (data: 제거된 상태)
 #                     }
-#                 ]
+#                 ],
+#                 "stream": False
 #             }
 #             ollam_client = get_client()
 #             ollama_res = await ollam_client.post(f"{OLLAMA_URL}/api/chat", json=payload)
 
-#             extracted_text = ollama_res['message']['content']
+#             extracted_text = ollama_res.json()['message']['content']
 #             print(f"extracted_text :  {extracted_text}")
 #             return f"\n\n> **[VLM 추출 시작]**\n{extracted_text}\n> **[VLM 추출 종료]**\n\n"
 
