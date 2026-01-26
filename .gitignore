@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 package-lock.json
 .env
+
+__pycache__/
+chroma_db/

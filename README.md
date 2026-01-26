@@ -456,6 +456,11 @@ sudo systemctl restart docker
 
 ※ Docker 재시작을 하지 않으면 100% 실패합니다.
 
+컨테이너 안에서 nvidia-smi 확인
+```bash
+docker exec -it ollama nvidia-smi
+```
+
 ---
 
 ## 설치 확인
