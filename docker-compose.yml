@@ -39,7 +39,7 @@ services:
       - ./data/docs:/app/data/docs
       - ./chroma_db:/app/chroma_db # 챗봇 크로마디비
 
-   # 🔥 여기 추가
+    # 🔥 여기 추가
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
